@@ -124,7 +124,14 @@ export function startMqttConsumer() {
     return client;
   }
 
-  client = mqtt.connect(config.mqttBrokerUrl);
+  const mqttOptions = {
+    ...(config.mqttUser ? { username: config.mqttUser } : {}),
+    ...(config.mqttPassword ? { password: config.mqttPassword } : {}),
+    ...(config.mqttProtocol ? { protocol: config.mqttProtocol } : {}),
+    ...(config.mqttPort ? { port: config.mqttPort } : {}),
+  };
+
+  client = mqtt.connect(config.mqttBrokerUrl, mqttOptions);
 
   client.on("connect", () => {
     console.log("MQTT connected, subscribing to telemetry topic");

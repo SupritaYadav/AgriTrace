@@ -22,11 +22,9 @@ import {
 
 import { FaCheckCircle } from "react-icons/fa";
 
-import {
-  shipments,
-  devices,
-  alerts,
-} from "../data/mockData";
+import { getDashboardSummary } from "../api/dashboardApi";
+import LoadingSpinner from "../components/common/LoadingSpinner";
+import ErrorState from "../components/common/ErrorState";
 
 function getShipmentBadgeClass(status) {
   switch (status) {
@@ -51,34 +49,57 @@ function getShipmentBadgeClass(status) {
 }
 
 function Dashboard() {
-  const activeShipments = shipments.filter(
-    (shipment) => shipment.status !== "Delivered"
-  );
+  const [dashboard, setDashboard] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
 
-  const onlineDevices = devices.filter(
-    (device) =>
-      device.status === "Online" ||
-      device.status === "Assigned"
-  );
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const data = await getDashboardSummary();
+        setDashboard(data);
+      } catch (err) {
+        console.error('Failed to fetch dashboard data', err);
+        setError(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
-  const offlineDevices = devices.filter(
-    (device) => device.status === "Offline"
-  );
+// Data from backend dashboard summary provides counts and arrays directly
+// No need to compute from mock data
 
-  const criticalAlerts = alerts.filter(
-    (alert) =>
-      alert.severity === "Critical" &&
-      !alert.resolved
-  );
+  if (loading) {
+    return <LoadingSpinner />;
+  }
 
-  const unresolvedAlerts = alerts.filter(
-    (alert) => !alert.resolved
-  );
+  if (error) {
+    return <ErrorState message="Failed to load dashboard data" retry={() => window.location.reload()} />;
+  }
+
+  const {
+    activeShipments,
+    completedShipments,
+    onlineDevices,
+    offlineDevices,
+    criticalAlerts,
+    averageTemperature,
+    averageHumidity,
+    recentShipments,
+    recentAlerts,
+  } = dashboard || {};
+
+  // Ensure arrays are defined
+  const displayedRecentShipments = recentShipments || [];
+  const displayedRecentAlerts = recentAlerts || [];
+
 
   const metrics = [
     {
       title: "Active Shipments",
-      value: activeShipments.length,
+      value: activeShipments ?? 0,
       icon: <FaBoxOpen />,
       iconClass: "blue",
       trend: "+3 since yesterday",
@@ -87,7 +108,7 @@ function Dashboard() {
 
     {
       title: "Completed Shipments",
-      value: 148,
+      value: completedShipments ?? 0,
       icon: <FaCheckCircle />,
       iconClass: "green",
       trend: "+12 this week",
@@ -96,7 +117,7 @@ function Dashboard() {
 
     {
       title: "Online Devices",
-      value: onlineDevices.length,
+      value: onlineDevices ?? 0,
       icon: <FaMicrochip />,
       iconClass: "green",
       trend: "Stable",
@@ -105,7 +126,7 @@ function Dashboard() {
 
     {
       title: "Offline Devices",
-      value: offlineDevices.length,
+      value: offlineDevices ?? 0,
       icon: <FaPlugCircleXmark />,
       iconClass: "red",
       trend: "+1 since yesterday",
@@ -114,7 +135,7 @@ function Dashboard() {
 
     {
       title: "Critical Alerts",
-      value: criticalAlerts.length,
+      value: criticalAlerts ?? 0,
       icon: <FaTriangleExclamation />,
       iconClass: "amber",
       trend: "Needs attention",
@@ -163,9 +184,11 @@ function Dashboard() {
     },
   ];
 
-  const recentShipments = shipments.slice(0, 5);
+  // Use displayed recent data
+  const recentShipments = displayedRecentShipments;
 
-  const recentAlerts = unresolvedAlerts.slice(0, 3);
+  const recentAlerts = displayedRecentAlerts;
+
 
   const renderTrendIcon = (type) => {
     if (type === "up") {
