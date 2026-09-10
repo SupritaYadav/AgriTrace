@@ -12,6 +12,9 @@ import timelineRoutes from "./routes/timelineRoutes.js";
 import telemetryRoutes from "./routes/telemetryRoutes.js";
 import { config } from "./core/config.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import environmentSummaryRoutes from "./routes/environmentSummaryRoutes.js";
+import publicTraceRoutes from "./routes/publicTraceRoutes.js";
+import qrRoutes from "./routes/qrRoutes.js";
 import { checkOfflineDevices } from "./services/deviceMonitorService.js";
 
 const app = express();
@@ -26,9 +29,12 @@ app.get("/", (req, res) => {
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/alerts", alertRoutes);
 app.use("/api/v1/shipments", shipmentRoutes);
+app.use("/api/v1/shipments", environmentSummaryRoutes);
+app.use("/api/v1/shipments", qrRoutes);
 app.use("/api/v1/devices", deviceRoutes);
 app.use("/api/v1/telemetry", telemetryRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
+app.use("/api/v1/public", publicTraceRoutes);
 
 const server = createServer(app);
 setupWebSocket(server);

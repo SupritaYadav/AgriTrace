@@ -4,6 +4,7 @@ import { Role } from "../core/roles.js";
 import { TimelineEventType } from "../core/timelineEvents.js";
 import { SHIPMENT_STATUS, ALLOWED_STATUS_TRANSITIONS } from "../utils/constants.js";
 import { addTimelineEvent } from "./timelineService.js";
+import { ensureUniqueTrackingId } from "./qrService.js";
 
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
@@ -97,11 +98,13 @@ export async function createShipment(data, createdBy, role) {
   validateThresholds(thresholds);
 
   const shipmentId = randomUUID();
+  const trackingId = await ensureUniqueTrackingId();
   const now = new Date().toISOString();
 
   const shipmentData = {
     ...data,
     shipmentId,
+    trackingId,
     createdBy,
     transporterId: null,
     warehouseId: null,
