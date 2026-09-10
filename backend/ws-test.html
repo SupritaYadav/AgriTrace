@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <h2>WebSocket Test</h2>
+  <pre id="log"></pre>
+  <script>
+    const token = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjI0N2Y4MDYwMDM5YjVmNDBkOTQ5NjkzOGJiMTg5NzA2ZWY4ODkzM2QiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vYWdyaXRyYWNlLWFwcC1kNGQ1ZCIsImF1ZCI6ImFncml0cmFjZS1hcHAtZDRkNWQiLCJhdXRoX3RpbWUiOjE3ODg5NDQ4OTEsInVzZXJfaWQiOiJVWEwyZE00bmVyTVBZdWxFSlVEM2s1cGdQbDYzIiwic3ViIjoiVVhMMmRNNG5lck1QWXVsRUpVRDNrNXBnUGw2MyIsImlhdCI6MTc4ODk0NDg5MSwiZXhwIjoxNzg4OTQ4NDkxLCJlbWFpbCI6ImhhcnNoaXRnb2VsOTIzNUBnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsImZpcmViYXNlIjp7ImlkZW50aXRpZXMiOnsiZW1haWwiOlsiaGFyc2hpdGdvZWw5MjM1QGdtYWlsLmNvbSJdfSwic2lnbl9pbl9wcm92aWRlciI6InBhc3N3b3JkIn19.RW4dy4BcM7-F1YZMD4hNktyJRuL82sUdvfuOQKSRNntJfFW-2ELhj8GYZT3Z8sUUN_2uzgaJddRcKOuwIpTYn6exlUpgGtvual-YIWca4Xb2zQXssjlfGwSMnX3sD8VORC1ltySeUYQezI7T3tDqtolUBC_WBoR6mZcdsx-dB9z1Zi10QMwE1MiQDRyA34OrjshjI39pOtGoSnIHcjsSM27xLEGxlE77-TbjnROt5B0AB0Ye0RyjMmv13IBwPX_mTUq5lmqfixlLV1L0mdFahcYHk23v23lSpC_LF682WI3o9LHoEsof8A4QUTjVBGkP5cvm6GRyNZEFknA-zki6kQ";
+    const ws = new WebSocket(`ws://127.0.0.1:8000?token=${token}`);
+
+    ws.onopen = () => {
+      document.getElementById("log").textContent += "Connected\n";
+    };
+    ws.onmessage = (event) => {
+      document.getElementById("log").textContent += "Received: " + event.data + "\n";
+    };
+    ws.onclose = () => {
+      document.getElementById("log").textContent += "Disconnected\n";
+    };
+    ws.onerror = (err) => {
+      document.getElementById("log").textContent += "Error\n";
+    };
+  </script>
+</body>
+</html>
