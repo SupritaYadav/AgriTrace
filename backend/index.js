@@ -17,7 +17,7 @@ import publicTraceRoutes from "./routes/publicTraceRoutes.js";
 import qrRoutes from "./routes/qrRoutes.js";
 import integrityRoutes from "./routes/integrityRoutes.js";
 import { checkOfflineDevices } from "./services/deviceMonitorService.js";
-import { createScheduledIntegrityCheckpoints } from "./services/checkpointService.js";
+import { startCheckpointScheduler } from "./services/checkpointService.js";
 
 const app = express();
 app.use(cors({ origin: config.frontendUrl }));
@@ -70,7 +70,7 @@ connectMongo()
 
     startMqttConsumer();
 
-    createScheduledIntegrityCheckpoints();
+    startCheckpointScheduler();
 
     setInterval(() => {
       checkOfflineDevices().catch((err) => {
@@ -78,11 +78,6 @@ connectMongo()
       });
     }, 60 * 1000);
 
-    setInterval(() => {
-      createScheduledIntegrityCheckpoints().catch((err) => {
-        console.error("Integrity checkpoint worker error:", err);
-      });
-    }, 5 * 60 * 1000);
   })
   .catch((err) => {
     console.error("Failed to start backend:", err);

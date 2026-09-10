@@ -9,6 +9,7 @@ import { evaluateAlerts, resolveSystemAlert } from "../services/alertService.js"
 import { db } from "./firebase.js";
 import { broadcastToShipment } from "./websocket.js";
 import { config } from "./config.js";
+import { generateTelemetryHash } from "../services/integrityService.js";
 
 let client = null;
 let lastShipmentMismatchWarning = "";
@@ -74,6 +75,9 @@ async function handleMessage(topic, message) {
     topicDeviceId,
     assignedShipmentId
   );
+  normalizedTelemetry.dataHash = generateTelemetryHash(normalizedTelemetry);
+  normalizedTelemetry.checkpointId = null;
+  normalizedTelemetry.checkpointed = false;
 
   const telemetryCollection = getTelemetryCollection();
   await telemetryCollection.insertOne({
