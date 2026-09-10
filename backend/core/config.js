@@ -22,4 +22,9 @@ export const config = Object.freeze({
   mqttBrokerUrl: requireEnv("MQTT_BROKER_URL"),
   mqttTopic: requireEnv("MQTT_TOPIC"),
   frontendUrl: process.env.FRONTEND_URL?.trim() || "http://localhost:5173",
+  blockchainMode: (process.env.BLOCKCHAIN_MODE || "mock").toLowerCase(),
+  blockchainRpcUrl: process.env.BLOCKCHAIN_RPC_URL?.trim() || "",
+  blockchainPrivateKey: process.env.BLOCKCHAIN_PRIVATE_KEY?.trim() || "",
+  blockchainContractAddress: process.env.BLOCKCHAIN_CONTRACT_ADDRESS?.trim() || "",
+  blockchainNetwork: process.env.BLOCKCHAIN_NETWORK?.trim() || "mock",
 });

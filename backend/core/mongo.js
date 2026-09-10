@@ -13,8 +13,10 @@
      await telemetryCollection.createIndex({ deviceId: 1 });
      await telemetryCollection.createIndex({ shipmentId: 1 });
      await telemetryCollection.createIndex({ timestamp: 1 });
+     await telemetryCollection.createIndex({ shipmentId: 1, deviceId: 1, checkpointed: 1, timestamp: 1 });
      await telemetryCollection.createIndex({ deviceId: 1, timestamp: -1 });
      await telemetryCollection.createIndex({ shipmentId: 1, timestamp: -1 });
+     await telemetryCollection.createIndex({ shipmentId: 1, deviceId: 1, checkpointId: 1 });
 
      console.log("MongoDB connected and indexes created");
    }

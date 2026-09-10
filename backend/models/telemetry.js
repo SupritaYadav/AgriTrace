@@ -59,6 +59,9 @@ export function normalizeTelemetry(data, verifiedDeviceId, shipmentId) {
     ...data,
     deviceId: verifiedDeviceId,
     shipmentId: shipmentId || null,
+    dataHash: undefined,
+    checkpointId: undefined,
+    checkpointed: false,
     timestamp: data.timestamp,
   };
 }

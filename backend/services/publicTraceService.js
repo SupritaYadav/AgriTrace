@@ -2,6 +2,7 @@ import { db } from "../core/firebase.js";
 import { getTelemetryCollection } from "../core/mongo.js";
 import { getTimeline } from "./timelineService.js";
 import { getShipmentEnvironmentSummary } from "./environmentSummaryService.js";
+import { BLOCKCHAIN_STATUS } from "../utils/constants.js";
 
 const PUBLIC_TIMELINE_TYPES = new Set([
   "SHIPMENT_CREATED",
@@ -51,6 +52,11 @@ export async function getPublicTraceByTrackingId(trackingId) {
     : null;
 
   const deviceData = deviceDoc?.exists ? deviceDoc.data() : null;
+  const checkpointSnapshot = await db.collection("integrityCheckpoints").where("shipmentId", "==", shipmentId).get();
+  const checkpoints = checkpointSnapshot.docs.map((doc) => doc.data());
+  const blockchainStatus = checkpoints.some((entry) => entry.blockchain?.status === BLOCKCHAIN_STATUS.CONFIRMED || entry.blockchain?.status === BLOCKCHAIN_STATUS.MOCK_VERIFIED)
+    ? (checkpoints.some((entry) => entry.blockchain?.status === BLOCKCHAIN_STATUS.CONFIRMED) ? BLOCKCHAIN_STATUS.CONFIRMED : BLOCKCHAIN_STATUS.MOCK_VERIFIED)
+    : "PENDING";
 
   return {
     shipmentId: shipment.shipmentId,
@@ -73,8 +79,11 @@ export async function getPublicTraceByTrackingId(trackingId) {
     },
     timeline: publicTimeline,
     integrity: {
-      verified: false,
-      status: "NOT_IMPLEMENTED_YET",
+      verified: checkpoints.length > 0,
+      status: checkpoints.length > 0 ? "DATA_INTEGRITY_VERIFIED" : "NO_CHECKPOINTS",
+      checkpointCount: checkpoints.length,
+      blockchainStatus,
+      blockchainMode: process.env.BLOCKCHAIN_MODE || "mock",
     },
     latestTelemetry: latestTelemetry
       ? {
