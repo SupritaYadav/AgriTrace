@@ -1,0 +1,63 @@
+:root {
+  --bg: #F5F9F7;
+  --card-bg: #FFFFFF;
+  --text: #1E293B;
+  --border: #DCE8E4;
+  --navy: #17324D;
+  --grad-brand: linear-gradient(135deg, #1F7A5A, #2563A6);
+}
+
+[data-theme="dark"] {
+  --bg: #0F1B17;
+  --card-bg: #16221E;
+  --text: #E6F0EA;
+  --text-muted: #93A9A0;
+  --border: #223832;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+[data-theme="dark"] .topbar,
+[data-theme="dark"] .content,
+[data-theme="dark"] .page,
+[data-theme="dark"] .card,
+[data-theme="dark"] .panel {
+  color: var(--text);
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.topbar {
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-btn:hover {
+  background: var(--border);
+}
