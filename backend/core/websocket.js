@@ -1,5 +1,6 @@
 import { WebSocketServer } from "ws";
-import { verifyToken, db } from "./firebase.js";
+import { verifyToken } from "./firebase.js";
+import { getCollection } from "./mongo.js";
 import { getShipmentForUser } from "../services/shipmentService.js";
 
 const clients = new Map();
@@ -102,8 +103,8 @@ export function setupWebSocket(server) {
 
     try {
       const decoded = await verifyToken(token);
-      const userDoc = await db.collection("users").doc(decoded.uid).get();
-      const role = userDoc.exists ? userDoc.data().role : null;
+      const userDoc = await getCollection("users").findOne({ uid: decoded.uid });
+      const role = userDoc?.role || null;
 
       if (!role) {
         ws.close(4003, "User profile not found");

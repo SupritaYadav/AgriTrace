@@ -1,6 +1,5 @@
 import { initializeApp, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -27,13 +26,12 @@ const serviceAccount = {
   universe_domain: process.env.FIREBASE_UNIVERSE_DOMAIN || "googleapis.com",
 };
 
-   initializeApp({
-     credential: cert(serviceAccount),
-   });
+initializeApp({
+  credential: cert(serviceAccount),
+});
 
-   export const auth = getAuth();
-   export const db = getFirestore();
+export const auth = getAuth();
 
-   export async function verifyToken(idToken) {
-     return await auth.verifyIdToken(idToken);
-   }
+export async function verifyToken(idToken) {
+  return await auth.verifyIdToken(idToken);
+}

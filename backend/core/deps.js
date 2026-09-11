@@ -1,4 +1,5 @@
-import { verifyToken, db } from "./firebase.js";
+import { verifyToken, auth } from "./firebase.js";
+import { getCollection } from "./mongo.js";
 
 export async function getCurrentUser(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -19,11 +20,13 @@ export async function getCurrentUser(req, res, next) {
 
 export function requireRole(...allowedRoles) {
   return async (req, res, next) => {
-    const doc = await db.collection("users").doc(req.user.uid).get();
-    if (!doc.exists || !allowedRoles.includes(doc.data().role)) {
+    const userDoc = await getCollection("users").findOne({ uid: req.user.uid });
+    if (!userDoc || !allowedRoles.includes(userDoc.role)) {
       return res.status(403).json({ detail: "Not authorized for this action" });
     }
-    req.user.role = doc.data().role;
+    req.user.role = userDoc.role;
     next();
   };
 }
+
+export { auth };

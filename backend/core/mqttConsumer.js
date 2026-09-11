@@ -1,13 +1,12 @@
 import mqtt from "mqtt";
-import { getTelemetryCollection } from "./mongo.js";
+import { getTelemetryCollection, getCollection } from "./mongo.js";
 import {
   normalizeTelemetry,
   validateReading,
 } from "../models/telemetry.js";
 import { parseTelemetryTopic } from "../models/mqttTopic.js";
 import { evaluateAlerts, resolveSystemAlert } from "../services/alertService.js";
-import { db } from "./firebase.js";
-import { broadcastToShipment } from "./websocket.js";
+import { broadcastToShipment, broadcastToAll } from "./websocket.js";
 import { config } from "./config.js";
 import { generateTelemetryHash } from "../services/integrityService.js";
 
@@ -44,13 +43,12 @@ async function handleMessage(topic, message) {
     return;
   }
 
-  const deviceDoc = await db.collection("devices").doc(topicDeviceId).get();
-  if (!deviceDoc.exists) {
+  const device = await getCollection("devices").findOne({ deviceId: topicDeviceId });
+  if (!device) {
     console.log("Rejected: unknown device", topicDeviceId);
     return;
   }
 
-  const device = deviceDoc.data();
   const assignedShipmentId = device.currentShipmentId || null;
 
   if (
@@ -66,10 +64,9 @@ async function handleMessage(topic, message) {
     }
   }
 
-  const shipmentDoc = assignedShipmentId
-    ? await db.collection("shipments").doc(assignedShipmentId).get()
+  const assignedShipment = assignedShipmentId
+    ? await getCollection("shipments").findOne({ shipmentId: assignedShipmentId })
     : null;
-  const assignedShipment = shipmentDoc?.exists ? shipmentDoc.data() : null;
   const normalizedTelemetry = normalizeTelemetry(
     data,
     topicDeviceId,
@@ -87,11 +84,14 @@ async function handleMessage(topic, message) {
 
   const previousDeviceState = device.status;
 
-  await db.collection("devices").doc(topicDeviceId).update({
-    status: "ONLINE",
-    battery: data.battery,
-    lastSeenAt: new Date().toISOString(),
-  });
+  await getCollection("devices").updateOne(
+    { deviceId: topicDeviceId },
+    { $set: {
+        status: "ONLINE",
+        battery: data.battery,
+        lastSeenAt: new Date().toISOString(),
+    } }
+  );
 
   if (previousDeviceState === "OFFLINE") {
     await resolveSystemAlert(topicDeviceId, "DEVICE_OFFLINE", "SYSTEM");
