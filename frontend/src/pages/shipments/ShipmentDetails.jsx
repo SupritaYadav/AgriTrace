@@ -296,9 +296,11 @@ function ShipmentDetails() {
               Assign Warehouse
             </button>
           ) : null}
-          <button className="btn secondary" disabled={actionLoading} onClick={handleUpdateThresholds}>
-            Update Thresholds
-          </button>
+          {role === "ADMIN" || role === "FARMER" ? (
+            <button className="btn secondary" disabled={actionLoading} onClick={handleUpdateThresholds}>
+              Update Thresholds
+            </button>
+          ) : null}
         </div>
       </section>
 

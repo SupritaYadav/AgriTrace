@@ -109,6 +109,7 @@ export const AuthProvider = ({ children }) => {
     user,
     profile,
     role: profile?.role ?? null,
+    profileExists: profile != null,
     authLoading: firebaseLoading || profileLoading,
     firebaseLoading,
     profileLoading,

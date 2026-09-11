@@ -444,10 +444,13 @@ function CreateShipment() {
           <button
             type="submit"
             className="btn primary"
-            disabled={submitting}
+            disabled={submitting || !(role === "FARMER" || role === "ADMIN")}
           >
             {submitting ? "Creating..." : "Create Shipment"}
           </button>
+          {(role !== "FARMER" && role !== "ADMIN") && (
+            <p>You are not authorized to create shipments.</p>
+          )}
         </div>
       </form>
     </div>

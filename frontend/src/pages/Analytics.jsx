@@ -86,7 +86,7 @@ const Analytics = () => {
           });
         }
       } catch (error) {
-        console.log("Backend not available. Using analytics mock data.");
+        // Backend not available; using fallback data.
       } finally {
         setLoading(false);
       }
