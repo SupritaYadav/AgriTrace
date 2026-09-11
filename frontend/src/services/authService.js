@@ -7,6 +7,11 @@ import {
 
 import { auth } from "../config/firebase";
 
+/**
+ * Create the Firebase account and set the display name.
+ * The Firestore business profile is created separately by the backend via
+ * POST /auth/register (see AuthContext.register).
+ */
 export const registerUser = async (name, email, password) => {
   const userCredential = await createUserWithEmailAndPassword(
     auth,

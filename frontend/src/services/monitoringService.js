@@ -1,13 +1,13 @@
-import api from "./api";
+import apiClient from "../api/axios";
 
 const monitoringService = {
   getLatestReadings: async () => {
-    const response = await api.get("/monitoring/latest");
+    const response = await apiClient.get("/monitoring/latest");
     return response.data;
   },
 
   getShipmentReadings: async (shipmentId) => {
-    const response = await api.get(
+    const response = await apiClient.get(
       `/monitoring/shipment/${shipmentId}`
     );
 
@@ -15,7 +15,7 @@ const monitoringService = {
   },
 
   getDeviceReadings: async (deviceId) => {
-    const response = await api.get(
+    const response = await apiClient.get(
       `/monitoring/device/${deviceId}`
     );
 
@@ -23,7 +23,7 @@ const monitoringService = {
   },
 
   getTemperatureHistory: async (shipmentId) => {
-    const response = await api.get(
+    const response = await apiClient.get(
       `/monitoring/${shipmentId}/temperature`
     );
 
@@ -31,7 +31,7 @@ const monitoringService = {
   },
 
   getHumidityHistory: async (shipmentId) => {
-    const response = await api.get(
+    const response = await apiClient.get(
       `/monitoring/${shipmentId}/humidity`
     );
 
@@ -39,7 +39,7 @@ const monitoringService = {
   },
 
   getEthyleneHistory: async (shipmentId) => {
-    const response = await api.get(
+    const response = await apiClient.get(
       `/monitoring/${shipmentId}/ethylene`
     );
 
@@ -47,7 +47,7 @@ const monitoringService = {
   },
 
   getLocationHistory: async (shipmentId) => {
-    const response = await api.get(
+    const response = await apiClient.get(
       `/monitoring/${shipmentId}/location`
     );
 
@@ -55,7 +55,7 @@ const monitoringService = {
   },
 
   getAnalytics: async () => {
-    const response = await api.get("/monitoring/analytics");
+    const response = await apiClient.get("/monitoring/analytics");
     return response.data;
   },
 };
