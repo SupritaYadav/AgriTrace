@@ -3,16 +3,25 @@ import apiClient from "./axios";
 // All functions unwrap the backend { success, message, data } envelope and
 // return the `data` payload directly.
 
+const normalizeShipment = (shipment) => {
+  if (!shipment || typeof shipment !== "object") return shipment;
+
+  return {
+    ...shipment,
+    id: shipment.id ?? shipment.shipmentId ?? shipment._id,
+  };
+};
+
 /** List shipments accessible to the current user. Returns an array. */
 export const listShipments = async () => {
   const response = await apiClient.get("/shipments");
-  return response.data ?? [];
+  return Array.isArray(response.data) ? response.data.map(normalizeShipment) : [];
 };
 
 /** Get one shipment by its shipmentId. */
 export const getShipment = async (shipmentId) => {
   const response = await apiClient.get(`/shipments/${shipmentId}`);
-  return response.data ?? null;
+  return normalizeShipment(response.data ?? null);
 };
 
 /** Create a shipment. Returns the created shipment (with backend IDs). */

@@ -25,3 +25,13 @@ export const registerProfile = async (role) => {
   return response.data;
 };
 
+/**
+ * Update the current user's profile.
+ * Endpoint: PUT /auth/me { name, phone, organisation, address }.
+ * Returns the updated profile object.
+ */
+export const updateUserProfile = async (updates) => {
+  const response = await apiClient.put('/auth/me', updates);
+  return response.data;
+};
+
