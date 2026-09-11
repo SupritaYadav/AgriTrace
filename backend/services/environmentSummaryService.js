@@ -1,4 +1,4 @@
-import { db } from "../core/firebase.js";
+import { getCollection } from "../core/mongo.js";
 import { getTelemetryCollection } from "../core/mongo.js";
 
 function toNumberOrNull(value) {
@@ -12,12 +12,11 @@ function getCondition(totalViolations) {
 }
 
 export async function getShipmentEnvironmentSummary(shipmentId) {
-  const shipmentDoc = await db.collection("shipments").doc(shipmentId).get();
-  if (!shipmentDoc.exists) {
+  const shipment = await getCollection("shipments").findOne({ shipmentId });
+  if (!shipment) {
     return null;
   }
 
-  const shipment = shipmentDoc.data();
   const telemetryCollection = getTelemetryCollection();
 
   const summaryPipeline = [

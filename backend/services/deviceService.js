@@ -1,30 +1,43 @@
-import { db } from "../core/firebase.js";
+import { getCollection } from "../core/mongo.js";
 import { getTelemetryCollection } from "../core/mongo.js";
-import { TimelineEventType } from "../core/timelineEvents.js";
-import { addTimelineEvent } from "./timelineService.js";
 
 export async function registerDevice(data) {
-  const deviceRef = db.collection("devices").doc(data.deviceId);
+  const devices = getCollection("devices");
   const deviceData = {
     deviceId: data.deviceId,
+    serialNumber: data.serialNumber || data.deviceId,
+    location: data.location || null,
+    type: data.type || "Sensor",
+    ownerId: data.ownerId || null,
     status: "OFFLINE",
     currentShipmentId: null,
     battery: null,
     firmwareVersion: data.firmwareVersion || null,
     lastSeenAt: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
-  await deviceRef.set(deviceData);
+
+  try {
+    await devices.insertOne(deviceData);
+  } catch (error) {
+    if (error.code === 11000 || error.code === "MongoServerError") {
+      const dupError = new Error("Device already registered");
+      dupError.code = "DEVICE_ALREADY_REGISTERED";
+      throw dupError;
+    }
+    throw error;
+  }
   return deviceData;
 }
 
 export async function listDevices() {
-  const snapshot = await db.collection("devices").get();
-  return snapshot.docs.map((doc) => doc.data());
+  const devices = getCollection("devices");
+  return devices.find({}).toArray();
 }
 
 export async function getDevice(deviceId) {
-  const doc = await db.collection("devices").doc(deviceId).get();
-  return doc.exists ? doc.data() : null;
+  return getCollection("devices").findOne({ deviceId });
 }
 
 export async function getDeviceHealth(deviceId) {
@@ -58,80 +71,74 @@ export async function getDeviceHealth(deviceId) {
 }
 
 export async function assignDevice(deviceId, shipmentId, actorId) {
-  const deviceRef = db.collection("devices").doc(deviceId);
-  const shipmentRef = db.collection("shipments").doc(shipmentId);
+  const devices = getCollection("devices");
+  const shipments = getCollection("shipments");
 
-  const result = await db.runTransaction(async (transaction) => {
-    const [deviceDoc, shipmentDoc] = await Promise.all([
-      transaction.get(deviceRef),
-      transaction.get(shipmentRef),
-    ]);
+  const device = await devices.findOne({ deviceId });
+  if (!device) {
+    const error = new Error("Device not found");
+    error.code = "DEVICE_NOT_FOUND";
+    throw error;
+  }
 
-    if (!deviceDoc.exists) {
-      const error = new Error("Device not found");
-      error.code = "DEVICE_NOT_FOUND";
-      throw error;
-    }
+  const shipment = await shipments.findOne({ shipmentId });
+  if (!shipment) {
+    const error = new Error("Shipment not found");
+    error.code = "SHIPMENT_NOT_FOUND";
+    throw error;
+  }
 
-    if (!shipmentDoc.exists) {
-      const error = new Error("Shipment not found");
-      error.code = "SHIPMENT_NOT_FOUND";
-      throw error;
-    }
+  const currentShipmentId = device.currentShipmentId;
+  const assignedDevice = shipment.assignedDevice;
 
-    const device = deviceDoc.data();
-    const shipment = shipmentDoc.data();
-    const currentShipmentId = device.currentShipmentId;
-    const assignedDevice = shipment.assignedDevice;
-
-    if (currentShipmentId === shipmentId && assignedDevice === deviceId) {
-      return {
-        deviceId,
-        shipmentId,
-        status: "ASSIGNED",
-        idempotent: true,
-      };
-    }
-
-    if (currentShipmentId && currentShipmentId !== shipmentId) {
-      const error = new Error("Device is already assigned");
-      error.code = "DEVICE_ALREADY_ASSIGNED";
-      throw error;
-    }
-
-    if (assignedDevice && assignedDevice !== deviceId) {
-      const error = new Error("Shipment already has a device");
-      error.code = "SHIPMENT_ALREADY_HAS_DEVICE";
-      throw error;
-    }
-
-    transaction.update(deviceRef, {
-      currentShipmentId: shipmentId,
-    });
-    transaction.update(shipmentRef, {
-      assignedDevice: deviceId,
-    });
-
+  if (currentShipmentId === shipmentId && assignedDevice === deviceId) {
     return {
       deviceId,
       shipmentId,
       status: "ASSIGNED",
-      idempotent: false,
+      idempotent: true,
     };
-  });
-
-  if (!result.idempotent) {
-    try {
-      await addTimelineEvent(
-        shipmentId,
-        TimelineEventType.DEVICE_ASSIGNED,
-        actorId,
-        { deviceId }
-      );
-    } catch (error) {
-      console.error("Device assignment timeline error:", error.message);
-    }
   }
 
-  return result;
+  if (currentShipmentId && currentShipmentId !== shipmentId) {
+    const error = new Error("Device is already assigned");
+    error.code = "DEVICE_ALREADY_ASSIGNED";
+    throw error;
+  }
+
+  if (assignedDevice && assignedDevice !== deviceId) {
+    const error = new Error("Shipment already has a device");
+    error.code = "SHIPMENT_ALREADY_HAS_DEVICE";
+    throw error;
+  }
+
+  await devices.updateOne(
+    { deviceId },
+    { $set: { currentShipmentId: shipmentId, updatedAt: new Date().toISOString() } }
+  );
+  await shipments.updateOne(
+    { shipmentId },
+    { $set: { assignedDevice: deviceId, updatedAt: new Date().toISOString() } }
+  );
+
+  // Add timeline event
+  try {
+    const { addTimelineEvent } = await import("./timelineService.js");
+    const { TimelineEventType } = await import("../core/timelineEvents.js");
+    await addTimelineEvent(
+      shipmentId,
+      TimelineEventType.DEVICE_ASSIGNED,
+      actorId,
+      { deviceId }
+    );
+  } catch (error) {
+    console.error("Device assignment timeline error:", error.message);
+  }
+
+  return {
+    deviceId,
+    shipmentId,
+    status: "ASSIGNED",
+    idempotent: false,
+  };
 }

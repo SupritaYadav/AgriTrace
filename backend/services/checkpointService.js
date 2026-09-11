@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { db } from "../core/firebase.js";
+import { getCollection } from "../core/mongo.js";
 import { getTelemetryCollection } from "../core/mongo.js";
 import { TimelineEventType } from "../core/timelineEvents.js";
 import { addTimelineEvent } from "./timelineService.js";
@@ -44,7 +44,7 @@ export async function createCheckpoint(shipmentId, deviceId, actorId = "SYSTEM",
     createdBy: actorId,
   };
 
-  await db.collection("integrityCheckpoints").doc(checkpointId).set(checkpoint);
+  await getCollection("integrityCheckpoints").insertOne(checkpoint);
   const ids = readings.map((reading) => reading._id);
   await getTelemetryCollection().updateMany(
     { _id: { $in: ids } },
@@ -60,29 +60,31 @@ export async function createCheckpoint(shipmentId, deviceId, actorId = "SYSTEM",
 }
 
 export async function getCheckpoint(checkpointId) {
-  const snapshot = await db.collection("integrityCheckpoints").doc(checkpointId).get();
-  return snapshot.exists ? snapshot.data() : null;
+  return getCollection("integrityCheckpoints").findOne({ checkpointId });
 }
 
 export async function verifyShipmentCheckpoints(shipmentId) {
-  const snapshot = await db.collection("integrityCheckpoints").where("shipmentId", "==", shipmentId).get();
-  const checkpoints = [];
-  for (const document of snapshot.docs) {
-    const checkpoint = document.data();
+  const checkpoints = await getCollection("integrityCheckpoints")
+    .find({ shipmentId })
+    .sort({ createdAt: 1 })
+    .toArray();
+
+  const results = [];
+  for (const checkpoint of checkpoints) {
     const readings = await getTelemetryCollection()
       .find({ checkpointId: checkpoint.checkpointId })
       .sort({ timestamp: 1 })
       .toArray();
     const verified = verifyCheckpoint(checkpoint, readings);
     const blockchain = await verifyCheckpointHash(checkpoint);
-    checkpoints.push({ ...checkpoint, verified, blockchainVerified: blockchain.verified });
+    results.push({ ...checkpoint, verified, blockchainVerified: blockchain.verified });
   }
 
   return {
     shipmentId,
-    checkpointCount: checkpoints.length,
-    verified: checkpoints.length > 0 && checkpoints.every((checkpoint) => checkpoint.verified && checkpoint.blockchainVerified),
-    checkpoints,
+    checkpointCount: results.length,
+    verified: results.length > 0 && results.every((c) => c.verified && c.blockchainVerified),
+    checkpoints: results,
   };
 }
 
@@ -91,7 +93,10 @@ export async function retryCheckpoint(checkpointId) {
   if (!checkpoint) return null;
   const blockchain = await storeCheckpointHash(checkpoint.checkpointHash);
   const updated = { ...checkpoint, blockchain, status: "CONFIRMED", updatedAt: new Date().toISOString() };
-  await db.collection("integrityCheckpoints").doc(checkpointId).set(updated, { merge: true });
+  await getCollection("integrityCheckpoints").updateOne(
+    { checkpointId },
+    { $set: { blockchain, status: "CONFIRMED", updatedAt: updated.updatedAt } }
+  );
   return updated;
 }
 

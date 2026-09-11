@@ -1,4 +1,4 @@
-import { db } from "../core/firebase.js";
+import { getCollection } from "../core/mongo.js";
 import { broadcastToAll } from "../core/websocket.js";
 import { addTimelineEvent } from "./timelineService.js";
 import { createSystemAlert } from "./alertService.js";
@@ -6,12 +6,10 @@ import { createSystemAlert } from "./alertService.js";
 const OFFLINE_TIMEOUT = 5 * 60 * 1000;
 
 export async function checkOfflineDevices() {
-  const snapshot = await db.collection("devices").get();
+  const devices = await getCollection("devices").find({}).toArray();
   const now = Date.now();
 
-  for (const doc of snapshot.docs) {
-    const device = doc.data();
-
+  for (const device of devices) {
     if (!device.lastSeenAt) continue;
 
     const lastSeen = new Date(device.lastSeenAt).getTime();
@@ -22,7 +20,10 @@ export async function checkOfflineDevices() {
     }
 
     if (offline) {
-      await doc.ref.update({ status: "OFFLINE" });
+      await getCollection("devices").updateOne(
+        { deviceId: device.deviceId },
+        { $set: { status: "OFFLINE" } }
+      );
 
       if (device.currentShipmentId) {
         await addTimelineEvent(device.currentShipmentId, "DEVICE_OFFLINE", "SYSTEM", {

@@ -1,17 +1,32 @@
-import { db } from "../core/firebase.js";
+import { getCollection } from "../core/mongo.js";
 
 export async function createUserProfile(uid, email, role) {
-  const userRef = db.collection("users").doc(uid);
+  const users = getCollection("users");
 
-  // Check whether profile already exists
-  const existingUser = await userRef.get();
-
-  if (existingUser.exists) {
-    const error = new Error("User profile already exists");
-    error.code = "USER_ALREADY_REGISTERED";
-    throw error;
+  if (!uid || !email) {
+    throw new Error("uid and email are required");
   }
 
+  // 1. Try exact Firebase UID match.
+  let existing = await users.findOne({ uid });
+
+  if (existing) {
+    return existing;
+  }
+
+  // 2. If the seed created a user with the same email but a fake UID,
+  //    connect that Mongo profile to the real Firebase account.
+  const byEmail = await users.findOne({ email });
+
+  if (byEmail) {
+    await users.updateOne(
+      { _id: byEmail._id },
+      { $set: { uid, updatedAt: new Date().toISOString() } }
+    );
+    return { ...byEmail, uid, updatedAt: new Date().toISOString() };
+  }
+
+  // 3. No Mongo profile exists yet — create a new one.
   const data = {
     uid,
     email,
@@ -21,26 +36,27 @@ export async function createUserProfile(uid, email, role) {
   };
 
   try {
-    await userRef.create(data);
+    await users.insertOne(data);
+    return data;
   } catch (error) {
-    if (error.code === 6 || error.code === "already-exists") {
+    if (error.code === 11000 || error.code === "MongoServerError") {
       const duplicateError = new Error("User profile already exists");
       duplicateError.code = "USER_ALREADY_REGISTERED";
       throw duplicateError;
     }
-
     throw error;
   }
-
-  return data;
 }
 
-
 export async function getUserProfile(uid) {
-  const doc = await db
-    .collection("users")
-    .doc(uid)
-    .get();
+  return getCollection("users").findOne({ uid }) ?? null;
+}
 
-  return doc.exists ? doc.data() : null;
+export async function updateUserProfile(uid, updates) {
+  const users = getCollection("users");
+  await users.updateOne(
+    { uid },
+    { $set: { ...updates, updatedAt: new Date().toISOString() } }
+  );
+  return getUserProfile(uid);
 }

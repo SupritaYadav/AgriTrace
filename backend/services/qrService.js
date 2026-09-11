@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import QRCode from "qrcode";
-import { db } from "../core/firebase.js";
+import { getCollection } from "../core/mongo.js";
 import { getShipmentForUser } from "./shipmentService.js";
 
 const PUBLIC_TRACE_BASE_URL = process.env.PUBLIC_TRACE_BASE_URL || "http://localhost:5174/trace";
@@ -60,17 +60,10 @@ export function generateTrackingId() {
 }
 
 export async function ensureUniqueTrackingId() {
+  const shipments = getCollection("shipments");
   let trackingId = generateTrackingId();
-  let exists = true;
-
-  while (exists) {
-    const snapshot = await db.collection("shipments").where("trackingId", "==", trackingId).limit(1).get();
-    if (snapshot.empty) {
-      exists = false;
-    } else {
-      trackingId = generateTrackingId();
-    }
+  while (await shipments.findOne({ trackingId })) {
+    trackingId = generateTrackingId();
   }
-
   return trackingId;
 }

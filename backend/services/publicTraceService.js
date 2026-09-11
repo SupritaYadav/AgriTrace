@@ -1,9 +1,4 @@
-import { db } from "../core/firebase.js";
-import { getTelemetryCollection } from "../core/mongo.js";
-import { getTimeline } from "./timelineService.js";
-import { getShipmentEnvironmentSummary } from "./environmentSummaryService.js";
-import { verifyShipmentCheckpoints } from "./checkpointService.js";
-import { BLOCKCHAIN_STATUS } from "../utils/constants.js";
+import { getCollection } from "../core/mongo.js";
 
 const PUBLIC_TIMELINE_TYPES = new Set([
   "SHIPMENT_CREATED",
@@ -19,26 +14,23 @@ export async function getPublicTraceByTrackingId(trackingId) {
     return null;
   }
 
-  const shipmentSnapshot = await db
-    .collection("shipments")
-    .where("trackingId", "==", trackingId)
-    .limit(1)
-    .get();
-
-  if (shipmentSnapshot.empty) {
+  const shipment = await getCollection("shipments").findOne({ trackingId });
+  if (!shipment) {
     return null;
   }
 
-  const shipment = shipmentSnapshot.docs[0].data();
   const shipmentId = shipment.shipmentId;
-  const telemetryCollection = getTelemetryCollection();
+  const telemetryCollection = getCollection("telemetry");
 
   const latestTelemetry = await telemetryCollection.findOne(
     { shipmentId },
     { sort: { timestamp: -1 }, projection: { temperature: 1, humidity: 1, gasLevel: 1, battery: 1, timestamp: 1 } }
   );
 
+  const { getShipmentEnvironmentSummary } = await import("./environmentSummaryService.js");
   const environmentSummary = await getShipmentEnvironmentSummary(shipmentId);
+
+  const { getTimeline } = await import("./timelineService.js");
   const timeline = await getTimeline(shipmentId);
 
   const publicTimeline = timeline
@@ -48,13 +40,14 @@ export async function getPublicTraceByTrackingId(trackingId) {
       timestamp: entry.timestamp,
     }));
 
-  const deviceDoc = shipment.assignedDevice
-    ? await db.collection("devices").doc(shipment.assignedDevice).get()
+  const deviceData = shipment.assignedDevice
+    ? await getCollection("devices").findOne({ deviceId: shipment.assignedDevice })
     : null;
 
-  const deviceData = deviceDoc?.exists ? deviceDoc.data() : null;
+  const { verifyShipmentCheckpoints } = await import("./checkpointService.js");
   const integrity = await verifyShipmentCheckpoints(shipmentId);
   const checkpoints = integrity.checkpoints;
+  const { BLOCKCHAIN_STATUS } = await import("../utils/constants.js");
   const blockchainStatus = checkpoints.some((entry) => entry.blockchain?.status === BLOCKCHAIN_STATUS.CONFIRMED)
     ? BLOCKCHAIN_STATUS.CONFIRMED
     : checkpoints.some((entry) => entry.blockchain?.status === BLOCKCHAIN_STATUS.MOCK_CONFIRMED || entry.blockchain?.status === BLOCKCHAIN_STATUS.MOCK_VERIFIED)

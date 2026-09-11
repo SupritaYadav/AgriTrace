@@ -1,14 +1,8 @@
 import { randomUUID } from "crypto";
-import { db } from "../core/firebase.js";
+import { getCollection } from "../core/mongo.js";
 import { Role } from "../core/roles.js";
-import { TimelineEventType } from "../core/timelineEvents.js";
 import { SHIPMENT_STATUS, ALLOWED_STATUS_TRANSITIONS } from "../utils/constants.js";
 import { addTimelineEvent } from "./timelineService.js";
-import { ensureUniqueTrackingId } from "./qrService.js";
-
-function isFiniteNumber(value) {
-  return typeof value === "number" && Number.isFinite(value);
-}
 
 export function validateThresholds(thresholds) {
   if (thresholds === undefined || thresholds === null) return;
@@ -88,6 +82,10 @@ export function validateThresholds(thresholds) {
   }
 }
 
+function isFiniteNumber(value) {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 export async function createShipment(data, createdBy, role) {
   const thresholds = data?.thresholds || {
     temperature: { min: null, max: null },
@@ -98,7 +96,22 @@ export async function createShipment(data, createdBy, role) {
   validateThresholds(thresholds);
 
   const shipmentId = randomUUID();
-  const trackingId = await ensureUniqueTrackingId();
+
+  const { randomBytes } = await import("crypto");
+  let trackingId = data?.trackingId;
+  if (!trackingId) {
+    const shipments = getCollection("shipments");
+    let exists = true;
+    while (exists) {
+      trackingId = `AGR-${randomBytes(4).toString("hex").toUpperCase()}`;
+      const existing = await shipments.findOne({ trackingId });
+      if (existing) {
+        exists = true;
+      } else {
+        exists = false;
+      }
+    }
+  }
   const now = new Date().toISOString();
 
   const shipmentData = {
@@ -119,9 +132,20 @@ export async function createShipment(data, createdBy, role) {
     shipmentData.farmerId = createdBy;
   }
 
-  await db.collection("shipments").doc(shipmentId).set(shipmentData);
+  const shipments = getCollection("shipments");
+  try {
+    await shipments.insertOne(shipmentData);
+  } catch (error) {
+    if (error.code === 11000) {
+      const dupError = new Error("Shipment ID conflict");
+      dupError.code = "SHIPMENT_CONFLICT";
+      throw dupError;
+    }
+    throw error;
+  }
 
   try {
+    const { TimelineEventType } = await import("../core/timelineEvents.js");
     await addTimelineEvent(
       shipmentId,
       TimelineEventType.SHIPMENT_CREATED,
@@ -138,19 +162,19 @@ export async function createShipment(data, createdBy, role) {
 export async function updateShipmentThresholds(shipmentId, thresholds, actorId = null) {
   validateThresholds(thresholds);
 
-  const shipmentRef = db.collection("shipments").doc(shipmentId);
-  const shipmentDoc = await shipmentRef.get();
-  if (!shipmentDoc.exists) return null;
+  const shipments = getCollection("shipments");
+  const result = await shipments.updateOne(
+    { shipmentId },
+    { $set: { thresholds, updatedAt: new Date().toISOString() } }
+  );
 
-  const nextThresholds = thresholds || shipmentDoc.data().thresholds || null;
-  await shipmentRef.update({ thresholds: nextThresholds, updatedAt: new Date().toISOString() });
+  if (result.matchedCount === 0) return null;
 
   if (actorId) {
-    await addTimelineEvent(shipmentId, "THRESHOLDS_UPDATED", actorId, { thresholds: nextThresholds });
+    await addTimelineEvent(shipmentId, "THRESHOLDS_UPDATED", actorId, { thresholds });
   }
 
-  const updated = await shipmentRef.get();
-  return updated.data();
+  return shipments.findOne({ shipmentId });
 }
 
 export async function updateShipmentStatus(shipmentId, status, actorId, actorRole = null) {
@@ -158,14 +182,14 @@ export async function updateShipmentStatus(shipmentId, status, actorId, actorRol
     throw new Error("Invalid shipment status");
   }
 
-  const shipmentRef = db.collection("shipments").doc(shipmentId);
-  const shipmentDoc = await shipmentRef.get();
+  const shipments = getCollection("shipments");
+  const shipment = await shipments.findOne({ shipmentId });
 
-  if (!shipmentDoc.exists) return null;
+  if (!shipment) return null;
 
-  const currentStatus = shipmentDoc.data().status;
+  const currentStatus = shipment.status;
   if (currentStatus === status) {
-    return shipmentDoc.data();
+    return shipment;
   }
 
   const allowedNextStatuses = ALLOWED_STATUS_TRANSITIONS[currentStatus] || [];
@@ -186,7 +210,10 @@ export async function updateShipmentStatus(shipmentId, status, actorId, actorRol
     }
   }
 
-  await shipmentRef.update({ status, updatedAt: new Date().toISOString() });
+  await shipments.updateOne(
+    { shipmentId },
+    { $set: { status, updatedAt: new Date().toISOString() } }
+  );
 
   const timelineMap = {
     [SHIPMENT_STATUS.PENDING]: "SHIPMENT_PENDING",
@@ -200,44 +227,49 @@ export async function updateShipmentStatus(shipmentId, status, actorId, actorRol
 
   await addTimelineEvent(shipmentId, timelineMap[status], actorId, { status });
 
-  const updated = await shipmentRef.get();
-  return updated.data();
+  return shipments.findOne({ shipmentId });
 }
 
 export async function assignTransporter(shipmentId, transporterId, actorId) {
-  const shipmentRef = db.collection("shipments").doc(shipmentId);
-  const shipmentDoc = await shipmentRef.get();
+  const shipments = getCollection("shipments");
+  const users = getCollection("users");
 
-  if (!shipmentDoc.exists) return null;
+  const shipment = await shipments.findOne({ shipmentId });
+  if (!shipment) return null;
 
-  const userDoc = await db.collection("users").doc(transporterId).get();
-  if (!userDoc.exists || userDoc.data().role !== Role.TRANSPORTER) {
+  const userDoc = await users.findOne({ uid: transporterId });
+  if (!userDoc || userDoc.role !== Role.TRANSPORTER) {
     throw new Error("Invalid transporter");
   }
 
-  await shipmentRef.update({ transporterId, updatedAt: new Date().toISOString() });
+  await shipments.updateOne(
+    { shipmentId },
+    { $set: { transporterId, updatedAt: new Date().toISOString() } }
+  );
   await addTimelineEvent(shipmentId, "TRANSPORTER_ASSIGNED", actorId, { transporterId });
 
-  const updated = await shipmentRef.get();
-  return updated.data();
+  return shipments.findOne({ shipmentId });
 }
 
 export async function assignWarehouse(shipmentId, warehouseId, actorId) {
-  const shipmentRef = db.collection("shipments").doc(shipmentId);
-  const shipmentDoc = await shipmentRef.get();
+  const shipments = getCollection("shipments");
+  const users = getCollection("users");
 
-  if (!shipmentDoc.exists) return null;
+  const shipment = await shipments.findOne({ shipmentId });
+  if (!shipment) return null;
 
-  const userDoc = await db.collection("users").doc(warehouseId).get();
-  if (!userDoc.exists || userDoc.data().role !== Role.WAREHOUSE) {
+  const userDoc = await users.findOne({ uid: warehouseId });
+  if (!userDoc || userDoc.role !== Role.WAREHOUSE) {
     throw new Error("Invalid warehouse");
   }
 
-  await shipmentRef.update({ warehouseId, updatedAt: new Date().toISOString() });
+  await shipments.updateOne(
+    { shipmentId },
+    { $set: { warehouseId, updatedAt: new Date().toISOString() } }
+  );
   await addTimelineEvent(shipmentId, "WAREHOUSE_ASSIGNED", actorId, { warehouseId });
 
-  const updated = await shipmentRef.get();
-  return updated.data();
+  return shipments.findOne({ shipmentId });
 }
 
 export function canUserAccessShipment(shipment, uid, role) {
@@ -258,57 +290,63 @@ export function canUserAccessShipment(shipment, uid, role) {
   return false;
 }
 
-async function getUniqueShipmentDocs(queries) {
-  const snapshots = await Promise.all(queries.map((query) => query.get()));
-  const documents = new Map();
-
-  for (const snapshot of snapshots) {
-    for (const document of snapshot.docs) {
-      documents.set(document.id, document.data());
-    }
-  }
-
-  return [...documents.values()];
-}
-
 export async function listShipments(uid, role) {
-  const collection = db.collection("shipments");
+  const shipments = getCollection("shipments");
 
   if (role === Role.ADMIN) {
-    const snapshot = await collection.get();
-    return snapshot.docs.map((doc) => doc.data());
+    return shipments.find({}).toArray();
   }
 
   if (role === Role.FARMER) {
-    return getUniqueShipmentDocs([
-      collection.where("farmerId", "==", uid),
-      collection.where("createdBy", "==", uid),
-    ]);
+    const farmerDocs = await shipments.find({ farmerId: uid }).toArray();
+    const creatorDocs = await shipments.find({ createdBy: uid }).toArray();
+    const seen = new Set();
+    const result = [];
+    for (const doc of [...farmerDocs, ...creatorDocs]) {
+      if (!seen.has(doc.shipmentId)) {
+        seen.add(doc.shipmentId);
+        result.push(doc);
+      }
+    }
+    return result;
   }
 
   if (role === Role.TRANSPORTER) {
-    return getUniqueShipmentDocs([
-      collection.where("transporterId", "==", uid),
-      collection.where("assignedTransporter", "==", uid),
-    ]);
+    const transporterDocs = await shipments.find({ transporterId: uid }).toArray();
+    const assignedDocs = await shipments.find({ assignedTransporter: uid }).toArray();
+    const seen = new Set();
+    const result = [];
+    for (const doc of [...transporterDocs, ...assignedDocs]) {
+      if (!seen.has(doc.shipmentId)) {
+        seen.add(doc.shipmentId);
+        result.push(doc);
+      }
+    }
+    return result;
   }
 
   if (role === Role.WAREHOUSE) {
-    return getUniqueShipmentDocs([
-      collection.where("warehouseId", "==", uid),
-      collection.where("assignedWarehouse", "==", uid),
-    ]);
+    const warehouseDocs = await shipments.find({ warehouseId: uid }).toArray();
+    const assignedDocs = await shipments.find({ assignedWarehouse: uid }).toArray();
+    const seen = new Set();
+    const result = [];
+    for (const doc of [...warehouseDocs, ...assignedDocs]) {
+      if (!seen.has(doc.shipmentId)) {
+        seen.add(doc.shipmentId);
+        result.push(doc);
+      }
+    }
+    return result;
   }
 
   return [];
 }
 
 export async function getShipmentForUser(shipmentId, uid, role) {
-  const doc = await db.collection("shipments").doc(shipmentId).get();
+  const shipment = await getCollection("shipments").findOne({ shipmentId });
 
-  if (!doc.exists) return null;
+  if (!shipment) return null;
 
-  const shipment = doc.data();
   if (!canUserAccessShipment(shipment, uid, role)) {
     const error = new Error("Not authorized to access this shipment");
     error.code = "SHIPMENT_ACCESS_DENIED";
@@ -319,6 +357,5 @@ export async function getShipmentForUser(shipmentId, uid, role) {
 }
 
 export async function getShipment(shipmentId) {
-  const doc = await db.collection("shipments").doc(shipmentId).get();
-  return doc.exists ? doc.data() : null;
+  return getCollection("shipments").findOne({ shipmentId });
 }

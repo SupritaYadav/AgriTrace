@@ -1,5 +1,4 @@
-import { randomUUID } from "crypto";
-import { db } from "../core/firebase.js";
+import { getCollection } from "../core/mongo.js";
 import { broadcastToAll } from "../core/websocket.js";
 import { TimelineEventType } from "../core/timelineEvents.js";
 import { addTimelineEvent } from "./timelineService.js";
@@ -11,19 +10,18 @@ export async function createSystemAlert({
   severity,
   value,
 }) {
-  const existing = await db
-    .collection("alerts")
-    .where("deviceId", "==", deviceId)
-    .where("type", "==", type)
-    .where("status", "==", "OPEN")
-    .limit(1)
-    .get();
+  const existing = await getCollection("alerts").findOne({
+    deviceId,
+    type,
+    status: "OPEN",
+  });
 
-  if (!existing.empty) {
-    return existing.docs[0].data();
+  if (existing) {
+    return existing;
   }
 
   const alertId = `${deviceId}_${type}_${Date.now()}`;
+  const now = new Date().toISOString();
   const alert = {
     alertId,
     deviceId,
@@ -31,39 +29,27 @@ export async function createSystemAlert({
     type,
     severity,
     value,
-    timestamp: new Date().toISOString(),
+    timestamp: now,
+    createdAt: now,
     status: "OPEN",
     acknowledgedAt: null,
     resolvedAt: null,
   };
 
-  await db.collection("alerts").doc(alertId).set(alert);
+  await getCollection("alerts").insertOne(alert);
   return alert;
 }
 
 export async function resolveSystemAlert(deviceId, type, actorId = "SYSTEM") {
-  const snapshot = await db
-    .collection("alerts")
-    .where("deviceId", "==", deviceId)
-    .where("type", "==", type)
-    .where("status", "==", "OPEN")
-    .limit(1)
-    .get();
-
-  if (snapshot.empty) {
-    return null;
-  }
-
-  const ref = snapshot.docs[0].ref;
   const now = new Date().toISOString();
-  await ref.update({
-    status: "RESOLVED",
-    resolvedAt: now,
-    resolvedBy: actorId,
-  });
+  const result = await getCollection("alerts").findOneAndUpdate(
+    { deviceId, type, status: "OPEN" },
+    { $set: { status: "RESOLVED", resolvedAt: now, resolvedBy: actorId } },
+    { sort: { createdAt: 1 }, returnDocument: "after" }
+  );
 
-  const updated = await ref.get();
-  return { id: updated.id, ...updated.data() };
+  if (!result) return null;
+  return { ...result, id: result._id?.toString() };
 }
 
 export const DEFAULT_BATTERY_MIN = 15;
@@ -202,78 +188,81 @@ function createAlert(reading, rule, thresholds, now) {
   };
 }
 
+function stripMongoId(doc) {
+  if (!doc) return null;
+  const { _id, ...rest } = doc;
+  return rest;
+}
+
 async function transitionAlert(reading, rule, thresholds) {
-  const activeRef = db.collection("alerts").doc(getActiveAlertId(reading, rule));
+  const activeId = getActiveAlertId(reading, rule);
+  const alertsCollection = getCollection("alerts");
   const now = new Date().toISOString();
   const violating = rule.check(reading, thresholds);
 
-  return db.runTransaction(async (transaction) => {
-    const activeSnapshot = await transaction.get(activeRef);
-    let alertRef = activeRef;
-    let currentAlert = activeSnapshot.exists ? activeSnapshot.data() : null;
-
-    // Read legacy random-ID alerts by device only, then filter the other
-    // identity fields locally so this compatibility path needs no composite index.
-    if (currentAlert?.status !== "OPEN") {
-      const legacySnapshot = await transaction.get(
-        db.collection("alerts").where("deviceId", "==", reading.deviceId)
-      );
-      const legacyAlert = legacySnapshot.docs.find((document) => {
-        const alert = document.data();
-        return (
-          alert.status === "OPEN" &&
-          (alert.shipmentId || null) === (reading.shipmentId || null) &&
-          alert.type === rule.type
-        );
-      });
-
-      if (legacyAlert) {
-        alertRef = legacyAlert.ref;
-        currentAlert = legacyAlert.data();
-      }
-    }
-
-    if (violating) {
-      if (currentAlert?.status === "OPEN") {
-        transaction.update(alertRef, {
-          value: rule.value(reading),
-          actualValue: rule.value(reading),
-          lastSeenAt: now,
-        });
-        return { action: "unchanged", alert: { ...currentAlert, lastSeenAt: now } };
-      }
-
-      if (currentAlert?.status === "RESOLVED") {
-        const historyRef = db.collection("alerts").doc(`history__${randomUUID()}`);
-        transaction.set(historyRef, {
-          ...currentAlert,
-          historical: true,
-          archivedAt: now,
-        });
-      }
-
-      const alert = createAlert(reading, rule, thresholds, now);
-      transaction.set(alertRef, alert);
-      return { action: "created", alert };
-    }
-
-    if (currentAlert?.status !== "OPEN") {
-      return { action: "unchanged", alert: currentAlert };
-    }
-
-    const resolvedAlert = {
-      ...currentAlert,
-      status: "RESOLVED",
-      resolvedAt: now,
-      lastSeenAt: now,
-    };
-    transaction.update(alertRef, {
-      status: "RESOLVED",
-      resolvedAt: now,
-      lastSeenAt: now,
-    });
-    return { action: "resolved", alert: resolvedAlert };
+  let currentAlert = await alertsCollection.findOne({
+    deviceId: reading.deviceId,
+    type: rule.type,
+    status: "OPEN",
+    shipmentId: reading.shipmentId || null,
   });
+
+  if (!currentAlert && violating) {
+    const legacyAlert = await alertsCollection.findOne({
+      alertId: activeId,
+    });
+
+    if (legacyAlert && legacyAlert.status !== "OPEN") {
+      return { action: "unchanged", alert: legacyAlert };
+    }
+  }
+
+  if (!currentAlert) {
+    currentAlert = await alertsCollection.findOne({ alertId: activeId });
+  }
+
+  if (violating) {
+    if (currentAlert?.status === "OPEN") {
+      await alertsCollection.updateOne(
+        { _id: currentAlert._id },
+        { $set: { value: rule.value(reading), actualValue: rule.value(reading), lastSeenAt: now } }
+      );
+      return { action: "unchanged", alert: { ...currentAlert, lastSeenAt: now } };
+    }
+
+    if (currentAlert?.status === "RESOLVED") {
+      const historyEntry = {
+        ...stripMongoId(currentAlert),
+        historical: true,
+        archivedAt: now,
+      };
+      await alertsCollection.insertOne(historyEntry);
+    }
+
+    const alert = createAlert(reading, rule, thresholds, now);
+    await alertsCollection.replaceOne(
+      { alertId: activeId },
+      alert,
+      { upsert: true }
+    );
+    return { action: "created", alert };
+  }
+
+  if (currentAlert?.status !== "OPEN") {
+    return { action: "unchanged", alert: currentAlert };
+  }
+
+  const resolvedAlert = {
+    ...currentAlert,
+    status: "RESOLVED",
+    resolvedAt: now,
+    lastSeenAt: now,
+  };
+  await alertsCollection.updateOne(
+    { _id: currentAlert._id },
+    { $set: { status: "RESOLVED", resolvedAt: now, lastSeenAt: now } }
+  );
+  return { action: "resolved", alert: resolvedAlert };
 }
 
 // Existing evaluateAlerts function retained
@@ -379,42 +368,39 @@ export async function listAlerts(filters = {}) {
   const safeLimit =
     Number.isInteger(parsedLimit) && parsedLimit > 0 ? parsedLimit : 20;
 
-  let query = db.collection("alerts");
+  let query = {};
 
   if (status) {
-    query = query.where("status", "==", status);
+    query.status = status;
   }
 
   if (severity) {
-    query = query.where("severity", "==", severity);
+    query.severity = severity;
   }
 
   if (shipmentId) {
-    query = query.where("shipmentId", "==", shipmentId);
+    query.shipmentId = shipmentId;
   }
 
   if (deviceId) {
-    query = query.where("deviceId", "==", deviceId);
+    query.deviceId = deviceId;
   }
 
   const offset = (safePage - 1) * safeLimit;
+  const alertsCollection = getCollection("alerts");
 
-  const snapshot = await query
-    .orderBy("createdAt", "desc")
-    .offset(offset)
-    .limit(safeLimit)
-    .get();
-
-  const alerts = snapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  }));
-
-  const totalSnap = await query.get();
-  const total = totalSnap.size;
+  const [alerts, total] = await Promise.all([
+    alertsCollection
+      .find(query)
+      .sort({ createdAt: -1 })
+      .skip(offset)
+      .limit(safeLimit)
+      .toArray(),
+    alertsCollection.countDocuments(query),
+  ]);
 
   return {
-    alerts,
+    alerts: alerts.map((doc) => ({ id: doc._id?.toString(), ...doc })),
     pagination: {
       page: safePage,
       limit: safeLimit,
@@ -426,25 +412,31 @@ export async function listAlerts(filters = {}) {
 
 /** Retrieve a single alert by its alertId */
 export async function getAlertById(alertId) {
-  const doc = await db.collection('alerts').doc(alertId).get();
-  if (!doc.exists) return null;
-  return { id: doc.id, ...doc.data() };
+  const doc = await getCollection("alerts").findOne({ alertId });
+  if (!doc) return null;
+  return { id: doc._id?.toString(), ...doc };
 }
 
 /** Acknowledge an alert */
 export async function acknowledgeAlert(alertId, userId) {
-  const ref = db.collection('alerts').doc(alertId);
   const now = new Date().toISOString();
-  await ref.update({ status: 'ACKNOWLEDGED', acknowledgedAt: now, acknowledgedBy: userId });
-  const updated = await ref.get();
-  return { id: updated.id, ...updated.data() };
+  const result = await getCollection("alerts").findOneAndUpdate(
+    { alertId },
+    { $set: { status: "ACKNOWLEDGED", acknowledgedAt: now, acknowledgedBy: userId } },
+    { returnDocument: "after" }
+  );
+  if (!result) return null;
+  return { id: result._id?.toString(), ...result };
 }
 
 /** Resolve an alert */
 export async function resolveAlert(alertId, userId) {
-  const ref = db.collection('alerts').doc(alertId);
   const now = new Date().toISOString();
-  await ref.update({ status: 'RESOLVED', resolvedAt: now, resolvedBy: userId });
-  const updated = await ref.get();
-  return { id: updated.id, ...updated.data() };
+  const result = await getCollection("alerts").findOneAndUpdate(
+    { alertId },
+    { $set: { status: "RESOLVED", resolvedAt: now, resolvedBy: userId } },
+    { returnDocument: "after" }
+  );
+  if (!result) return null;
+  return { id: result._id?.toString(), ...result };
 }
