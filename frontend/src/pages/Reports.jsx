@@ -1,14 +1,118 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+import { listShipments } from "../api/shipmentApi";
+import { listAlerts } from "../api/alertApi";
+import { listDevices } from "../api/deviceApi";
+import { getDashboardSummary } from "../api/dashboardApi";
 
 const Reports = () => {
   const [dateRange, setDateRange] = useState("Last 30 days");
   const [product, setProduct] = useState("All Products");
-  const [shipment, setShipment] = useState("All Shipments");
+  const [shipmentFilter, setShipmentFilter] = useState("All Shipments");
   const [organization, setOrganization] = useState("All Organizations");
 
-  const handleAction = (reportName, actionType) => {
-    alert(`${actionType} for ${reportName}`);
+  const [shipments, setShipments] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [devices, setDevices] = useState([]);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [shipRes, alertRes, devRes, dashRes] = await Promise.all([
+          listShipments(),
+          listAlerts({ limit: 100 }),
+          listDevices(),
+          getDashboardSummary(),
+        ]);
+        setShipments(Array.isArray(shipRes) ? shipRes : []);
+        const alertData = alertRes?.alerts || alertRes?.data || [];
+        setAlerts(Array.isArray(alertData) ? alertData : []);
+        setDevices(Array.isArray(devRes) ? devRes : []);
+        setDashboardData(dashRes ?? null);
+      } catch (err) {
+        console.error("Failed to load report data", err);
+        setError(err.message || "Failed to load report data");
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const downloadReport = (reportName) => {
+    const shipmentData = JSON.stringify(shipments, null, 2);
+    const alertData = JSON.stringify(alerts, null, 2);
+    const deviceData = JSON.stringify(devices, null, 2);
+    const dashData = JSON.stringify(dashboardData, null, 2);
+
+    let content = "";
+    content += `=== ${reportName} ===\n`;
+    content += `Date Range: ${dateRange}\n`;
+    content += `Product: ${product}\n`;
+    content += `Shipment Filter: ${shipmentFilter}\n`;
+    content += `Organization: ${organization}\n`;
+    content += `Generated: ${new Date().toISOString()}\n\n`;
+
+    if (reportName.includes("Shipment Summary")) {
+      content += `--- Shipment Summary ---\n`;
+      content += `Total Shipments: ${shipments.length}\n`;
+      const byStatus = {};
+      shipments.forEach((s) => {
+        const st = s.status || "Unknown";
+        byStatus[st] = (byStatus[st] || 0) + 1;
+      });
+      content += `By Status: ${JSON.stringify(byStatus)}\n\n`;
+      content += shipmentData;
+    } else if (reportName.includes("Environmental")) {
+      content += `--- Environmental Compliance ---\n`;
+      content += `Total Devices: ${devices.length}\n`;
+      content += `Open Alerts: ${alerts.filter((a) => (a.status || "").toLowerCase() === "open").length}\n`;
+      content += `Dashboard: ${JSON.stringify(dashboardData)}\n\n`;
+      content += alertData;
+    } else if (reportName.includes("Device")) {
+      content += `--- Device Health ---\n`;
+      content += `Total Devices: ${devices.length}\n`;
+      content += `Online: ${devices.filter((d) => d.status === "ONLINE").length}\n`;
+      content += `Offline: ${devices.filter((d) => d.status === "OFFLINE").length}\n\n`;
+      content += deviceData;
+    } else if (reportName.includes("Traceability")) {
+      content += `--- Traceability Report ---\n`;
+      content += `Dashboard Summary: ${JSON.stringify(dashboardData)}\n`;
+      content += `Total Shipments: ${shipments.length}\n`;
+      content += `Total Alerts: ${alerts.length}\n\n`;
+      content += shipmentData;
+    }
+
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${reportName.replace(/\s+/g, "_")}_${Date.now()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
+
+  if (loading) {
+    return <div style={{ padding: 24 }}>Loading reports…</div>;
+  }
+
+  if (error) {
+    return <div style={{ padding: 24, color: "red" }}>Failed to load reports: {error}</div>;
+  }
+
+  const reports = [
+    { title: "Shipment Summary Report", desc: "Overview of all shipments, statuses, and delivery performance." },
+    { title: "Environmental Compliance Report", desc: "Temperature, humidity, and gas threshold compliance across shipments." },
+    { title: "Device Health Report", desc: "Battery health, uptime, and connectivity for all IoT nodes." },
+    { title: "Traceability Report", desc: "Complete farm-to-fork audit trail for selected batches." },
+  ];
 
   return (
     <div className="page-container">
@@ -64,7 +168,6 @@ const Reports = () => {
           gap: 10px;
           margin-top: 6px;
         }
-        /* Explicit Button Overrides to match Image 1 */
         .report-actions .custom-secondary-btn {
           background-color: var(--bg-secondary);
           color: var(--text);
@@ -85,13 +188,14 @@ const Reports = () => {
           font-weight: 600;
           cursor: pointer;
         }
+        .report-data-summary {
+          font-size: 12px;
+          color: var(--text-muted);
+          padding: 8px 0;
+        }
         @media (max-width: 1024px) {
-          .report-filter {
-            grid-template-columns: repeat(2, 1fr);
-          }
-          .report-grid {
-            grid-template-columns: 1fr;
-          }
+          .report-filter { grid-template-columns: repeat(2, 1fr); }
+          .report-grid { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -102,28 +206,25 @@ const Reports = () => {
         </div>
       </div>
 
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded">
+          Failed to load some report data
+        </div>
+      )}
+
       <div className="content-card report-filter">
         <div className="form-group">
           <label>Date Range</label>
-          <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-            className="form-select"
-          >
+          <select value={dateRange} onChange={(e) => setDateRange(e.target.value)} className="form-select">
             <option>Last 30 days</option>
             <option>Last 7 days</option>
             <option>Last 90 days</option>
             <option>This Year</option>
           </select>
         </div>
-
         <div className="form-group">
           <label>Product</label>
-          <select
-            value={product}
-            onChange={(e) => setProduct(e.target.value)}
-            className="form-select"
-          >
+          <select value={product} onChange={(e) => setProduct(e.target.value)} className="form-select">
             <option>All Products</option>
             <option>Dairy</option>
             <option>Produce</option>
@@ -131,28 +232,18 @@ const Reports = () => {
             <option>Pharma</option>
           </select>
         </div>
-
         <div className="form-group">
           <label>Shipment</label>
-          <select
-            value={shipment}
-            onChange={(e) => setShipment(e.target.value)}
-            className="form-select"
-          >
+          <select value={shipmentFilter} onChange={(e) => setShipmentFilter(e.target.value)} className="form-select">
             <option>All Shipments</option>
             <option>Active</option>
             <option>Completed</option>
             <option>Delayed</option>
           </select>
         </div>
-
         <div className="form-group">
           <label>Organization</label>
-          <select
-            value={organization}
-            onChange={(e) => setOrganization(e.target.value)}
-            className="form-select"
-          >
+          <select value={organization} onChange={(e) => setOrganization(e.target.value)} className="form-select">
             <option>All Organizations</option>
             <option>Org A</option>
             <option>Org B</option>
@@ -160,94 +251,41 @@ const Reports = () => {
         </div>
       </div>
 
+      <div className="report-data-summary">
+        {dashboardData && (
+          <>
+            Active Shipments: {dashboardData.activeShipments ?? "—"} |
+            Completed: {dashboardData.completedShipments ?? "—"} |
+            Online Devices: {dashboardData.onlineDevices ?? "—"} |
+            Open Alerts: {dashboardData.openAlerts ?? "—"}
+          </>
+        )}
+      </div>
+
       <div className="report-grid">
-        <div className="report-card">
-          <div className="rc-icon">
-            <i className="fa-solid fa-file-lines"></i>
+        {reports.map((report) => (
+          <div className="report-card" key={report.title}>
+            <div className="rc-icon">
+              <i className="fa-solid fa-file-lines"></i>
+            </div>
+            <h4>{report.title}</h4>
+            <p>{report.desc}</p>
+            <div className="report-actions">
+              <button
+                className="custom-secondary-btn"
+                onClick={() => downloadReport(report.title)}
+              >
+                Generate Report
+              </button>
+              <button
+                className="custom-primary-btn"
+                onClick={() => downloadReport(report.title)}
+              >
+                Download PDF
+              </button>
+            </div>
           </div>
-          <h4>Shipment Summary Report</h4>
-          <p>Overview of all shipments, statuses, and delivery performance.</p>
-          <div className="report-actions">
-            <button
-              className="custom-secondary-btn"
-              onClick={() => handleAction("Shipment Summary Report", "Generate Report")}
-            >
-              Generate Report
-            </button>
-            <button
-              className="custom-primary-btn"
-              onClick={() => handleAction("Shipment Summary Report", "Download PDF")}
-            >
-              Download PDF
-            </button>
-          </div>
-        </div>
-
-        <div className="report-card">
-          <div className="rc-icon">
-            <i className="fa-solid fa-temperature-low"></i>
-          </div>
-          <h4>Environmental Compliance Report</h4>
-          <p>Temperature, humidity, and gas threshold compliance across shipments.</p>
-          <div className="report-actions">
-            <button
-              className="custom-secondary-btn"
-              onClick={() => handleAction("Environmental Compliance Report", "Generate Report")}
-            >
-              Generate Report
-            </button>
-            <button
-              className="custom-primary-btn"
-              onClick={() => handleAction("Environmental Compliance Report", "Download PDF")}
-            >
-              Download PDF
-            </button>
-          </div>
-        </div>
-
-        <div className="report-card">
-          <div className="rc-icon">
-            <i className="fa-solid fa-microchip"></i>
-          </div>
-          <h4>Device Health Report</h4>
-          <p>Battery health, uptime, and connectivity for all IoT nodes.</p>
-          <div className="report-actions">
-            <button
-              className="custom-secondary-btn"
-              onClick={() => handleAction("Device Health Report", "Generate Report")}
-            >
-              Generate Report
-            </button>
-            <button
-              className="custom-primary-btn"
-              onClick={() => handleAction("Device Health Report", "Download PDF")}
-            >
-              Download PDF
-            </button>
-          </div>
-        </div>
-
-        <div className="report-card">
-          <div className="rc-icon">
-            <i className="fa-solid fa-route"></i>
-          </div>
-          <h4>Traceability Report</h4>
-          <p>Complete farm-to-fork audit trail for selected batches.</p>
-          <div className="report-actions">
-            <button
-              className="custom-secondary-btn"
-              onClick={() => handleAction("Traceability Report", "Generate Report")}
-            >
-              Generate Report
-            </button>
-            <button
-              className="custom-primary-btn"
-              onClick={() => handleAction("Traceability Report", "Download PDF")}
-            >
-              Download PDF
-            </button>
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   );

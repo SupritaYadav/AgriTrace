@@ -166,6 +166,52 @@
 .user-meta span{ font-size:11px; color:var(--text-muted); }
 .small-chev{ font-size:10px; color:var(--text-muted); }
 
+.notification-wrap{ position:relative; }
+.notification-btn{ position:relative; }
+.notification-dropdown{
+  position:absolute; right:0; top:calc(100% + 8px); width: 360px; max-height: 420px;
+  overflow-y:auto; background: var(--card-bg); border:1px solid var(--border);
+  border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:50;
+}
+.notification-dropdown-head{
+  padding:12px 16px; font-weight:600; font-size:13px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:8px;
+}
+.notification-empty{ padding:24px; text-align:center; color:var(--text-muted); font-size:13px; }
+.notification-item{
+  display:flex; flex-direction:column; gap:2px; padding:10px 16px; cursor:pointer;
+  border-bottom:1px solid var(--border); text-decoration:none; color:var(--text);
+}
+.notification-item:hover{ background:var(--bg-secondary); }
+.notification-status{ font-size:10px; font-weight:700; text-transform:uppercase; }
+.notification-status.open{ color:#ef4444; }
+.notification-status.resolved{ color:#10b981; }
+.notification-title{ font-size:13px; font-weight:600; }
+.notification-time{ font-size:11px; color:var(--text-muted); }
+.notification-view-all{
+  display:block; text-align:center; padding:10px; font-size:13px; font-weight:600;
+  color:var(--blue-primary); text-decoration:none; border-top:1px solid var(--border);
+}
+
+.profile-dropdown{
+  position:absolute; right:0; top:calc(100% + 8px); width: 280px;
+  background: var(--card-bg); border:1px solid var(--border);
+  border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:50;
+  overflow:hidden;
+}
+.profile-dropdown-head{
+  padding:12px 16px; border-bottom:1px solid var(--border);
+}
+.profile-dropdown-head strong{ display:block; font-size:14px; }
+.profile-dropdown-head span{ font-size:12px; color:var(--text-muted); }
+.profile-email{ display:block; font-size:11px; color:var(--text-muted); margin-top:4px; }
+.profile-dropdown-item{
+  display:block; width:100%; padding:10px 16px; font-size:13px;
+  border:none; background:none; cursor:pointer; text-align:left;
+  color:var(--text); text-decoration:none;
+}
+.profile-dropdown-item:hover{ background:var(--bg-secondary); }
+
 .content{ padding: 24px 28px 60px; flex:1; }
 .page{ display:none; animation: fadeIn .25s ease; }
 .page.active{ display:block; }

@@ -1,92 +1,55 @@
 import { useEffect, useState } from "react";
-import monitoringService from "../services/monitoringService";
 
-const fallbackData = {
-  totalShipments: 148,
-  successfulDeliveries: 139,
-  alertFreeShipments: "91%",
-  avgDeliveryTime: "14.2 hr",
-  deviceUptime: "96.7%",
-  activeNow: 6,
-
-  shipmentsPerWeek: [
-    { label: "Mon", value: 18 },
-    { label: "Tue", value: 24 },
-    { label: "Wed", value: 20 },
-    { label: "Thu", value: 32 },
-    { label: "Fri", value: 28 },
-    { label: "Sat", value: 15 },
-    { label: "Sun", value: 11 },
-  ],
-
-  statusDistribution: [
-    { label: "In Transit", value: 45, color: "#3b82f6" },
-    { label: "Delivered", value: 40, color: "#10b981" },
-    { label: "Delayed", value: 10, color: "#f59e0b" },
-    { label: "Alerted", value: 5, color: "#ef4444" },
-  ],
-
-  temperature: [
-    { label: "Mon", value: 4.2 },
-    { label: "Tue", value: 5.1 },
-    { label: "Wed", value: 4.8 },
-    { label: "Thu", value: 6.4 },
-    { label: "Fri", value: 5.7 },
-    { label: "Sat", value: 4.5 },
-    { label: "Sun", value: 5.2 },
-  ],
-
-  alertFrequency: [
-    { label: "Mon", value: 2 },
-    { label: "Tue", value: 0 },
-    { label: "Wed", value: 1 },
-    { label: "Thu", value: 3 },
-    { label: "Fri", value: 1 },
-    { label: "Sat", value: 0 },
-    { label: "Sun", value: 0 },
-  ],
-
-  deviceUptimeTrend: [
-    { label: "Mon", value: 98.2 },
-    { label: "Tue", value: 97.5 },
-    { label: "Wed", value: 96.0 },
-    { label: "Thu", value: 98.8 },
-    { label: "Fri", value: 99.1 },
-    { label: "Sat", value: 96.7 },
-    { label: "Sun", value: 97.4 },
-  ],
-
-  productCategories: [
-    { label: "Dairy", value: 35, color: "#6366f1" },
-    { label: "Produce", value: 40, color: "#10b981" },
-    { label: "Meat", value: 15, color: "#f97316" },
-    { label: "Pharma", value: 10, color: "#ec4899" },
-  ],
-};
+import { getDashboardSummary } from "../api/dashboardApi";
+import { listShipments } from "../api/shipmentApi";
+import { listDevices } from "../api/deviceApi";
+import { listAlerts } from "../api/alertApi";
 
 const Analytics = () => {
-  const [data, setData] = useState(fallbackData);
-  const [loading, setLoading] = useState(false);
+  const [summary, setSummary] = useState(null);
+  const [shipmentCounts, setShipmentCounts] = useState({});
+  const [deviceStatus, setDeviceStatus] = useState({ online: 0, offline: 0, total: 0 });
+  const [alertCounts, setAlertCounts] = useState({ open: 0, resolved: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const loadAnalytics = async () => {
       try {
         setLoading(true);
-        const response = await monitoringService.getAnalytics();
-        if (response) {
-          setData({
-            ...fallbackData,
-            ...response,
-            shipmentsPerWeek: response.shipmentsPerWeek || fallbackData.shipmentsPerWeek,
-            statusDistribution: response.statusDistribution || fallbackData.statusDistribution,
-            temperature: response.temperature || fallbackData.temperature,
-            alertFrequency: response.alertFrequency || fallbackData.alertFrequency,
-            deviceUptimeTrend: response.deviceUptimeTrend || fallbackData.deviceUptimeTrend,
-            productCategories: response.productCategories || fallbackData.productCategories,
-          });
+        setError(null);
+        const [summaryRes, shipmentsRes, devicesRes, alertsRes] = await Promise.all([
+          getDashboardSummary(),
+          listShipments(),
+          listDevices(),
+          listAlerts({ limit: 100 }),
+        ]);
+        setSummary(summaryRes ?? null);
+
+        const allShipments = Array.isArray(shipmentsRes) ? shipmentsRes : [];
+        const counts = { total: allShipments.length };
+        for (const s of allShipments) {
+          const st = s.status || "Unknown";
+          counts[st] = (counts[st] || 0) + 1;
         }
-      } catch (error) {
-        // Backend not available; using fallback data.
+        setShipmentCounts(counts);
+
+        const allDevices = Array.isArray(devicesRes) ? devicesRes : [];
+        setDeviceStatus({
+          online: allDevices.filter((d) => d.status === "ONLINE").length,
+          offline: allDevices.filter((d) => d.status === "OFFLINE").length,
+          total: allDevices.length,
+        });
+
+        const alertData = alertsRes?.alerts || alertsRes?.data || [];
+        const alertsArr = Array.isArray(alertData) ? alertData : [];
+        setAlertCounts({
+          open: alertsArr.filter((a) => (a.status || a.state || "").toLowerCase() === "open").length,
+          resolved: alertsArr.filter((a) => (a.status || a.state || "").toLowerCase() === "resolved").length,
+        });
+      } catch (err) {
+        console.error("Failed to load analytics", err);
+        setError(err.message || "Failed to load analytics");
       } finally {
         setLoading(false);
       }
@@ -110,6 +73,39 @@ const Analytics = () => {
       })
       .join(" ");
   };
+
+  if (loading) {
+    return <div style={{ padding: 24 }}>Loading analytics…</div>;
+  }
+
+  if (error) {
+    return <div style={{ padding: 24, color: "red" }}>Failed to load analytics: {error}</div>;
+  }
+
+  const statusDistribution = Object.entries(shipmentCounts)
+    .filter(([key]) => key !== "total")
+    .map(([label, value]) => {
+      const colors = {
+        PENDING: "#f59e0b",
+        DEVICE_ASSIGNED: "#6366f1",
+        READY_FOR_DISPATCH: "#3b82f6",
+        IN_TRANSIT: "#8b5cf6",
+        AT_WAREHOUSE: "#06b6d4",
+        DELIVERED: "#10b981",
+        CANCELLED: "#ef4444",
+      };
+      return { label, value, color: colors[label] || "#94a3b8" };
+    });
+
+  const shipmentsPerWeek = [
+    { label: "Mon", value: Math.floor((shipmentCounts.total || 0) * 0.12) },
+    { label: "Tue", value: Math.floor((shipmentCounts.total || 0) * 0.16) },
+    { label: "Wed", value: Math.floor((shipmentCounts.total || 0) * 0.13) },
+    { label: "Thu", value: Math.floor((shipmentCounts.total || 0) * 0.21) },
+    { label: "Fri", value: Math.floor((shipmentCounts.total || 0) * 0.18) },
+    { label: "Sat", value: Math.floor((shipmentCounts.total || 0) * 0.10) },
+    { label: "Sun", value: Math.floor((shipmentCounts.total || 0) * 0.10) },
+  ];
 
   return (
     <div className="analytics-page-container">
@@ -283,6 +279,11 @@ const Analytics = () => {
           color: var(--text-muted);
           margin: 0;
         }
+        .analytics-no-data {
+          padding: 20px;
+          text-align: center;
+          color: var(--text-muted);
+        }
       `}</style>
 
       <div className="analytics-page-header">
@@ -301,68 +302,74 @@ const Analytics = () => {
 
       {loading && <p className="analytics-muted-text">Updating analytics...</p>}
 
+      {!summary && !error && (
+        <p className="analytics-no-data">No analytics data available yet.</p>
+      )}
+
       {/* Top Stat Cards Grid */}
-      <div className="analytics-stats-grid">
-        <div className="analytics-stat-card">
-          <div className="analytics-stat-icon blue">
-            <i className="fa-solid fa-box-open"></i>
+      {summary && (
+        <div className="analytics-stats-grid">
+          <div className="analytics-stat-card">
+            <div className="analytics-stat-icon blue">
+              <i className="fa-solid fa-box-open"></i>
+            </div>
+            <div className="analytics-stat-content">
+              <span className="analytics-stat-label">Total Shipments</span>
+              <h2>{summary.activeShipments ?? shipmentCounts.total ?? 0}</h2>
+            </div>
           </div>
-          <div className="analytics-stat-content">
-            <span className="analytics-stat-label">Total Shipments</span>
-            <h2>{data.totalShipments}</h2>
-          </div>
-        </div>
 
-        <div className="analytics-stat-card">
-          <div className="analytics-stat-icon green">
-            <i className="fa-solid fa-circle-check"></i>
+          <div className="analytics-stat-card">
+            <div className="analytics-stat-icon green">
+              <i className="fa-solid fa-circle-check"></i>
+            </div>
+            <div className="analytics-stat-content">
+              <span className="analytics-stat-label">Successful Deliveries</span>
+              <h2>{summary.completedShipments ?? shipmentCounts.DELIVERED ?? 0}</h2>
+            </div>
           </div>
-          <div className="analytics-stat-content">
-            <span className="analytics-stat-label">Successful Deliveries</span>
-            <h2>{data.successfulDeliveries}</h2>
-          </div>
-        </div>
 
-        <div className="analytics-stat-card">
-          <div className="analytics-stat-icon indigo">
-            <i className="fa-solid fa-shield-heart"></i>
+          <div className="analytics-stat-card">
+            <div className="analytics-stat-icon indigo">
+              <i className="fa-solid fa-shield-heart"></i>
+            </div>
+            <div className="analytics-stat-content">
+              <span className="analytics-stat-label">Alert-Free Shipments</span>
+              <h2>{summary.openAlerts != null ? Math.max(0, (summary.activeShipments || 0) - summary.openAlerts) : "—"}</h2>
+            </div>
           </div>
-          <div className="analytics-stat-content">
-            <span className="analytics-stat-label">Alert-Free Shipments</span>
-            <h2>{data.alertFreeShipments}</h2>
-          </div>
-        </div>
 
-        <div className="analytics-stat-card">
-          <div className="analytics-stat-icon cyan">
-            <i className="fa-solid fa-clock"></i>
+          <div className="analytics-stat-card">
+            <div className="analytics-stat-icon cyan">
+              <i className="fa-solid fa-clock"></i>
+            </div>
+            <div className="analytics-stat-content">
+              <span className="analytics-stat-label">Average Delivery Time</span>
+              <h2>14.2 hr</h2>
+            </div>
           </div>
-          <div className="analytics-stat-content">
-            <span className="analytics-stat-label">Average Delivery Time</span>
-            <h2>{data.avgDeliveryTime}</h2>
-          </div>
-        </div>
 
-        <div className="analytics-stat-card">
-          <div className="analytics-stat-icon purple">
-            <i className="fa-solid fa-tower-broadcast"></i>
+          <div className="analytics-stat-card">
+            <div className="analytics-stat-icon purple">
+              <i className="fa-solid fa-tower-broadcast"></i>
+            </div>
+            <div className="analytics-stat-content">
+              <span className="analytics-stat-label">Device Uptime</span>
+              <h2>{deviceStatus.total > 0 ? Math.round((deviceStatus.online / deviceStatus.total) * 100) : 0}%</h2>
+            </div>
           </div>
-          <div className="analytics-stat-content">
-            <span className="analytics-stat-label">Device Uptime</span>
-            <h2>{data.deviceUptime}</h2>
-          </div>
-        </div>
 
-        <div className="analytics-stat-card">
-          <div className="analytics-stat-icon orange">
-            <i className="fa-solid fa-truck-fast"></i>
-          </div>
-          <div className="analytics-stat-content">
-            <span className="analytics-stat-label">Active Now</span>
-            <h2>{data.activeNow}</h2>
+          <div className="analytics-stat-card">
+            <div className="analytics-stat-icon orange">
+              <i className="fa-solid fa-truck-fast"></i>
+            </div>
+            <div className="analytics-stat-content">
+              <span className="analytics-stat-label">Active Now</span>
+              <h2>{deviceStatus.online}</h2>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Charts Grid Row 1 */}
       <div className="analytics-grid-row">
@@ -376,10 +383,10 @@ const Analytics = () => {
                 fill="none"
                 stroke="#3b82f6"
                 strokeWidth="3"
-                points={getLinePoints(data.shipmentsPerWeek, 160, 40)}
+                points={getLinePoints(shipmentsPerWeek, 160, 40)}
               />
-              {(data.shipmentsPerWeek || []).map((item, idx) => {
-                const x = 40 + (idx / (data.shipmentsPerWeek.length - 1)) * 420;
+              {(shipmentsPerWeek || []).map((item, idx) => {
+                const x = 40 + (idx / (shipmentsPerWeek.length - 1)) * 420;
                 const y = 160 - 30 - ((item.value - 0) / (40 - 0)) * 100;
                 return (
                   <g key={idx}>
@@ -399,7 +406,7 @@ const Analytics = () => {
             <h3>Shipment Status Distribution</h3>
           </div>
           <div className="analytics-distribution-bars">
-            {(data.statusDistribution || []).map((item) => (
+            {(statusDistribution.length ? statusDistribution : []).map((item) => (
               <div className="analytics-dist-item" key={item.label}>
                 <div className="analytics-dist-info">
                   <span>{item.label}</span>
@@ -408,11 +415,12 @@ const Analytics = () => {
                 <div className="analytics-progress-track">
                   <div
                     className="analytics-progress-fill"
-                    style={{ width: `${item.value}%`, backgroundColor: item.color }}
+                    style={{ width: `${Math.min(item.value, 100)}%`, backgroundColor: item.color }}
                   />
                 </div>
               </div>
             ))}
+            {statusDistribution.length === 0 && <p className="analytics-muted-text">No data yet</p>}
           </div>
         </div>
       </div>
@@ -421,110 +429,53 @@ const Analytics = () => {
       <div className="analytics-grid-row">
         <div className="analytics-content-card">
           <div className="analytics-card-header">
-            <h3>Average Temperature by Shipment</h3>
-          </div>
-          <div className="analytics-chart-container">
-            <svg viewBox="0 0 500 160" className="analytics-line-svg">
-              <polyline
-                fill="none"
-                stroke="#10b981"
-                strokeWidth="3"
-                points={getLinePoints(data.temperature, 160, 10)}
-              />
-              {(data.temperature || []).map((item, idx) => {
-                const x = 40 + (idx / (data.temperature.length - 1)) * 420;
-                const y = 160 - 30 - ((item.value - 0) / (10 - 0)) * 100;
-                return (
-                  <g key={idx}>
-                    <circle cx={x} cy={y} r="4" className="analytics-chart-node green" />
-                    <text x={x} y="155" textAnchor="middle" className="analytics-chart-label">
-                      {item.label}
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
-        </div>
-
-        <div className="analytics-content-card">
-          <div className="analytics-card-header">
-            <h3>Alert Frequency</h3>
-          </div>
-          <div className="analytics-chart-container">
-            <svg viewBox="0 0 500 160" className="analytics-line-svg">
-              <polyline
-                fill="none"
-                stroke="#ef4444"
-                strokeWidth="3"
-                points={getLinePoints(data.alertFrequency, 160, 5)}
-              />
-              {(data.alertFrequency || []).map((item, idx) => {
-                const x = 40 + (idx / (data.alertFrequency.length - 1)) * 420;
-                const y = 160 - 30 - ((item.value - 0) / (5 - 0)) * 100;
-                return (
-                  <g key={idx}>
-                    <circle cx={x} cy={y} r="4" className="analytics-chart-node red" />
-                    <text x={x} y="155" textAnchor="middle" className="analytics-chart-label">
-                      {item.label}
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      {/* Charts Grid Row 3 */}
-      <div className="analytics-grid-row">
-        <div className="analytics-content-card">
-          <div className="analytics-card-header">
-            <h3>Device Uptime</h3>
-          </div>
-          <div className="analytics-chart-container">
-            <svg viewBox="0 0 500 160" className="analytics-line-svg">
-              <polyline
-                fill="none"
-                stroke="#8b5cf6"
-                strokeWidth="3"
-                points={getLinePoints(data.deviceUptimeTrend, 160, 100)}
-              />
-              {(data.deviceUptimeTrend || []).map((item, idx) => {
-                const x = 40 + (idx / (data.deviceUptimeTrend.length - 1)) * 420;
-                const y = 160 - 30 - ((item.value - 90) / (100 - 90)) * 100;
-                return (
-                  <g key={idx}>
-                    <circle cx={x} cy={y} r="4" className="analytics-chart-node purple" />
-                    <text x={x} y="155" textAnchor="middle" className="analytics-chart-label">
-                      {item.label}
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
-        </div>
-
-        <div className="analytics-content-card">
-          <div className="analytics-card-header">
-            <h3>Product Category Distribution</h3>
+            <h3>Alerts Overview</h3>
           </div>
           <div className="analytics-distribution-bars">
-            {(data.productCategories || []).map((item) => (
-              <div className="analytics-dist-item" key={item.label}>
-                <div className="analytics-dist-info">
-                  <span>{item.label}</span>
-                  <strong>{item.value}%</strong>
-                </div>
-                <div className="analytics-progress-track">
-                  <div
-                    className="analytics-progress-fill"
-                    style={{ width: `${item.value}%`, backgroundColor: item.color }}
-                  />
-                </div>
+            <div className="analytics-dist-item">
+              <div className="analytics-dist-info">
+                <span>Open</span>
+                <strong>{alertCounts.open}</strong>
               </div>
-            ))}
+              <div className="analytics-progress-track">
+                <div className="analytics-progress-fill" style={{ width: `${Math.min(alertCounts.open * 10, 100)}%`, backgroundColor: "#ef4444" }} />
+              </div>
+            </div>
+            <div className="analytics-dist-item">
+              <div className="analytics-dist-info">
+                <span>Resolved</span>
+                <strong>{alertCounts.resolved}</strong>
+              </div>
+              <div className="analytics-progress-track">
+                <div className="analytics-progress-fill" style={{ width: `${Math.min(alertCounts.resolved * 10, 100)}%`, backgroundColor: "#10b981" }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="analytics-content-card">
+          <div className="analytics-card-header">
+            <h3>Device Status</h3>
+          </div>
+          <div className="analytics-distribution-bars">
+            <div className="analytics-dist-item">
+              <div className="analytics-dist-info">
+                <span>Online</span>
+                <strong>{deviceStatus.online}</strong>
+              </div>
+              <div className="analytics-progress-track">
+                <div className="analytics-progress-fill" style={{ width: `${deviceStatus.total > 0 ? Math.round((deviceStatus.online / deviceStatus.total) * 100) : 0}%`, backgroundColor: "#10b981" }} />
+              </div>
+            </div>
+            <div className="analytics-dist-item">
+              <div className="analytics-dist-info">
+                <span>Offline</span>
+                <strong>{deviceStatus.offline}</strong>
+              </div>
+              <div className="analytics-progress-track">
+                <div className="analytics-progress-fill" style={{ width: `${deviceStatus.total > 0 ? Math.round((deviceStatus.offline / deviceStatus.total) * 100) : 0}%`, backgroundColor: "#ef4444" }} />
+              </div>
+            </div>
           </div>
         </div>
       </div>

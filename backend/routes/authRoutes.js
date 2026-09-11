@@ -24,7 +24,8 @@ router.post("/register", getCurrentUser, async (req, res) => {
     // Never allow ADMIN through public registration
     if (!PUBLIC_REGISTRATION_ROLES.includes(role)) {
       return res.status(400).json({
-        detail: "Invalid role",
+        success: false,
+        message: "Invalid role",
       });
     }
 
@@ -34,19 +35,25 @@ router.post("/register", getCurrentUser, async (req, res) => {
       role
     );
 
-    return res.status(201).json(profile);
+    return res.status(201).json({
+      success: true,
+      message: "User profile created successfully",
+      data: profile,
+    });
 
   } catch (error) {
     console.error("Registration error:", error);
 
     if (error.code === "USER_ALREADY_REGISTERED") {
       return res.status(409).json({
-        detail: "User profile already exists",
+        success: false,
+        message: "User profile already exists. Please log in instead.",
       });
     }
 
     return res.status(500).json({
-      detail: "Failed to create user profile",
+      success: false,
+      message: "Failed to create user profile",
     });
   }
 });

@@ -6,7 +6,11 @@ import { success, error } from "../utils/apiResponse.js";
 
 const router = express.Router();
 
-router.post("/", getCurrentUser, requireRole(Role.ADMIN), async (req, res) => {
+router.post(
+  "/",
+  getCurrentUser,
+  requireRole(Role.FARMER, Role.ADMIN),
+  async (req, res) => {
   try {
     const device = await registerDevice(req.body);
     return success(res, device, "Device registered successfully");

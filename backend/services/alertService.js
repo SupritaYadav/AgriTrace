@@ -361,22 +361,67 @@ export async function evaluateAlerts(reading, shipment = null) {
  * @param {object} filters { status, severity, shipmentId, deviceId, page, limit }
  */
 export async function listAlerts(filters = {}) {
-  const { status, severity, shipmentId, deviceId, page = 1, limit = 20 } = filters;
-  let query = db.collection('alerts');
-  if (status) query = query.where('status', '==', status);
-  if (severity) query = query.where('severity', '==', severity);
-  if (shipmentId) query = query.where('shipmentId', '==', shipmentId);
-  if (deviceId) query = query.where('deviceId', '==', deviceId);
+  const {
+    status,
+    severity,
+    shipmentId,
+    deviceId,
+    page = 1,
+    limit = 20,
+  } = filters;
+
+  const parsedPage = Number.parseInt(page, 10);
+  const parsedLimit = Number.parseInt(limit, 10);
+
+  const safePage =
+    Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+
+  const safeLimit =
+    Number.isInteger(parsedLimit) && parsedLimit > 0 ? parsedLimit : 20;
+
+  let query = db.collection("alerts");
+
+  if (status) {
+    query = query.where("status", "==", status);
+  }
+
+  if (severity) {
+    query = query.where("severity", "==", severity);
+  }
+
+  if (shipmentId) {
+    query = query.where("shipmentId", "==", shipmentId);
+  }
+
+  if (deviceId) {
+    query = query.where("deviceId", "==", deviceId);
+  }
+
+  const offset = (safePage - 1) * safeLimit;
+
   const snapshot = await query
-    .orderBy('createdAt', 'desc')
-    .offset((page - 1) * limit)
-    .limit(limit)
+    .orderBy("createdAt", "desc")
+    .offset(offset)
+    .limit(safeLimit)
     .get();
-  const alerts = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-  // Get total count for pagination (simple estimate)
+
+  const alerts = snapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }));
+
   const totalSnap = await query.get();
   const total = totalSnap.size;
-  return { alerts, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
+
+  return {
+    alerts,
+    pagination: {
+      page: safePage,
+      limit: safeLimit,
+      total,
+      pages: Math.ceil(total / safeLimit),
+    },
+  };
 }
 
 /** Retrieve a single alert by its alertId */

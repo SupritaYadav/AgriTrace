@@ -1,0 +1,1 @@
+{"name": "agritrace", "private": true, "type": "module", "scripts": {"seed": "node seed.js", "seed:refresh": "node seed.js --force"}}

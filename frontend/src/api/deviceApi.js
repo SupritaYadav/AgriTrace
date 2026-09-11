@@ -36,7 +36,7 @@ export const getDeviceHealth = async (deviceId) => {
   return response.data ?? null;
 };
 
-/** Register a device (ADMIN only). */
+/** Register a device (FARMER/ADMIN only). */
 export const registerDevice = async (payload) => {
   const response = await apiClient.post("/devices", payload);
   return response.data ?? null;

@@ -1,20 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
 import { useAuth } from "../context/AuthContext";
+import { listShipments } from "../api/shipmentApi";
 
 const Profile = () => {
-  const { user } = useAuth();
+  const { user, profile, profileLoading } = useAuth();
 
   const [formData, setFormData] = useState({
-    name: user?.displayName || "Kritika Gupta",
-    email: user?.email || "kritika.gupta@agritrace.demo",
-    phone: "+91 98765 43210",
-    role: "Operations Manager",
-    orgName: "AgriTrace Demo Network",
-    orgType: "Multi-stakeholder Supply Chain",
-    state: "Uttar Pradesh",
-    district: "Lucknow",
+    name: "",
+    email: "",
+    phone: "",
+    role: "",
+    orgName: "",
+    orgType: "",
+    state: "",
+    district: "",
   });
-
   const [toggles, setToggles] = useState({
     twoFactor: true,
     tempAlerts: true,
@@ -22,8 +23,47 @@ const Profile = () => {
     deviceOffline: true,
     shipmentUpdates: false,
   });
-
+  const [myShipments, setMyShipments] = useState([]);
+  const [loadingShipments, setLoadingShipments] = useState(false);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!user) return;
+    setFormData({
+      name: user.displayName || profile?.name || "",
+      email: user.email || profile?.email || "",
+      phone: profile?.phone || "",
+      role: profile?.role || "",
+      orgName: profile?.organisation || "",
+      orgType: "",
+      state: profile?.address?.state || "",
+      district: profile?.address?.district || "",
+    });
+  }, [user, profile]);
+
+  useEffect(() => {
+    if (!user) {
+      setMyShipments([]);
+      return;
+    }
+    const load = async () => {
+      setLoadingShipments(true);
+      try {
+        const data = await listShipments();
+        const all = Array.isArray(data) ? data : [];
+        setMyShipments(
+          all.filter(
+            (s) => s.createdBy === user.uid || s.owner === user.uid
+          )
+        );
+      } catch (err) {
+        console.error("Failed to load shipments", err);
+      } finally {
+        setLoadingShipments(false);
+      }
+    };
+    load();
+  }, [user]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -31,7 +71,7 @@ const Profile = () => {
   };
 
   const handleToggle = (key) => {
-    setToggles((prev) => ({ ...prev, [key]: !prev.key }));
+    setToggles((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleSubmit = (e) => {
@@ -39,6 +79,24 @@ const Profile = () => {
     setMessage("Profile updated successfully.");
     setTimeout(() => setMessage(""), 3000);
   };
+
+  if (!user) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold mb-4">My Profile</h1>
+        <p className="text-red-600">Please log in to view your profile.</p>
+      </div>
+    );
+  }
+
+  if (profileLoading) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold mb-4">My Profile</h1>
+        <p className="text-gray-500">Loading profile…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container">
@@ -120,6 +178,13 @@ const Profile = () => {
           margin-bottom: 16px;
           border: 1px solid #a7f3d0;
         }
+        .profile-shipment-item {
+          padding: 8px 12px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          margin-bottom: 8px;
+          font-size: 13px;
+        }
       `}</style>
 
       <div className="page-header">
@@ -175,8 +240,9 @@ const Profile = () => {
                   type="text"
                   name="role"
                   value={formData.role}
-                  onChange={handleChange}
+                  disabled
                   className="form-input"
+                  style={{ backgroundColor: "var(--bg-secondary)", color: "var(--text-muted)" }}
                 />
               </div>
             </div>
@@ -230,6 +296,28 @@ const Profile = () => {
               />
             </div>
           </div>
+        </div>
+
+        {/* My Shipments */}
+        <div className="content-card">
+          <h3 style={{ fontSize: "16px", fontWeight: "600", marginBottom: "16px", color: "var(--text)" }}>
+            My Shipments
+          </h3>
+          {loadingShipments ? (
+            <p className="text-gray-500 text-sm">Loading shipments…</p>
+          ) : myShipments.length === 0 ? (
+            <p className="text-gray-500 text-sm">No shipments yet.</p>
+          ) : (
+            <div>
+              {myShipments.map((s) => (
+                <div key={s.id || s._id} className="profile-shipment-item">
+                  <strong>{s.productName || s.product || "Unknown"}</strong>
+                  {" — "}
+                  {s.status || "Unknown"}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Security */}

@@ -74,6 +74,23 @@ export const AuthProvider = ({ children }) => {
     };
   }, [user]);
 
+  // Auto-provision a FARMER profile when a user logs in without one.
+  useEffect(() => {
+    if (!user || profile !== null || profileLoading) return;
+    let cancelled = false;
+    const provision = async () => {
+      try {
+        await registerProfile("FARMER");
+      } catch (err) {
+        if (!cancelled && err.status !== 409) {
+          console.error("Failed to auto-provision profile", err);
+        }
+      }
+    };
+    provision();
+    return () => { cancelled = true; };
+  }, [user, profile, profileLoading]);
+
   const login = async (email, password) => {
     return await loginUser(email, password);
   };

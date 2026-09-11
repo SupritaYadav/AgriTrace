@@ -17,6 +17,7 @@ import {
 
 import { FaCheckCircle } from "react-icons/fa";
 
+import { useAuth } from "../context/AuthContext";
 import { getDashboardSummary } from "../api/dashboardApi";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import EmptyState from "../components/common/EmptyState";
@@ -44,6 +45,7 @@ function getShipmentBadgeClass(status) {
 }
 
 function Dashboard() {
+  const { user } = useAuth();
   const [dashboard, setDashboard] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
@@ -169,7 +171,7 @@ function Dashboard() {
 
       <section className="hero-banner">
         <div className="hero-text">
-          <h2>Good Morning, Kritika</h2>
+          <h2>Good Morning, {user?.displayName || "User"}</h2>
 
           <p>
             Here is what is happening across your supply

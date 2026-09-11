@@ -168,7 +168,6 @@ const Sidebar = ({
           >
             <i className="fa-solid fa-triangle-exclamation"></i>
             <span>Alerts</span>
-            <span className="nav-badge">2</span>
           </NavLink>
 
           <NavLink
