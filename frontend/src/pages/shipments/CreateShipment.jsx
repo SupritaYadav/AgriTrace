@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FaBox,
   FaLocationDot,
@@ -7,12 +8,16 @@ import {
   FaMicrochip,
 } from "react-icons/fa6";
 
-import { devices } from "../../data/mockData";
+import { createShipment } from "../../api/shipmentApi";
+import { listDevices } from "../../api/deviceApi";
+import LoadingSpinner from "../../components/common/LoadingSpinner";
+import EmptyState from "../../components/common/EmptyState";
+import { useAuth } from "../../context/AuthContext";
 
 const initialForm = {
   productName: "",
   category: "Vegetables",
-  batchId: "AGR-BATCH-010",
+  batchId: "",
   quantity: "",
   unit: "kg",
   grade: "Grade A",
@@ -48,55 +53,116 @@ const initialForm = {
 };
 
 function CreateShipment() {
+  const navigate = useNavigate();
+  const { role } = useAuth();
   const [form, setForm] = useState(initialForm);
-  const [message, setMessage] = useState("");
+  const [devices, setDevices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
 
-  const availableDevices = devices.filter(
-    (device) => device.status === "Available"
-  );
+  useEffect(() => {
+    const fetchDevices = async () => {
+      try {
+        const data = await listDevices();
+        setDevices(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to load devices", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDevices();
+  }, []);
 
   function handleChange(event) {
     const { name, value } = event.target;
-
     setForm((previous) => ({
       ...previous,
       [name]: value,
     }));
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
 
-    console.log("Shipment:", form);
+    try {
+      const payload = {
+        product: form.productName,
+        category: form.category,
+        batchId: form.batchId,
+        quantity: form.quantity,
+        unit: form.unit,
+        grade: form.grade,
+        source: form.sourceCity,
+        sourceDistrict: form.sourceDistrict,
+        sourceState: form.sourceState,
+        destination: form.destinationCity,
+        destinationState: form.destinationState,
+        pickupLocation: form.pickupLocation,
+        contactPerson: form.contactPerson,
+        phone: form.phone,
+        vehicle: form.vehicleNumber,
+        driver: form.driverName,
+        departureDate: form.departureDate,
+        departureTime: form.departureTime,
+        deliveryDate: form.deliveryDate,
+        transportType: form.transportType,
+        startDate: form.departureDate,
+        eta: form.deliveryDate,
+        thresholds: {
+          temperature: {
+            min: Number(form.temperatureMin) || null,
+            max: Number(form.temperatureMax) || null,
+          },
+          humidity: {
+            min: Number(form.humidityMin) || null,
+            max: Number(form.humidityMax) || null,
+          },
+          gasLevel: {
+            max: Number(form.gasThreshold) || null,
+          },
+        },
+        deviceId: form.deviceId || undefined,
+      };
 
-    setMessage(
-      `Shipment for ${form.productName} created successfully.`
-    );
+      const shipment = await createShipment(payload);
+      setSuccess(`Shipment ${shipment.shipmentId || shipment.trackingId || ""} created successfully.`);
+      setTimeout(() => {
+        navigate("/shipments/active");
+      }, 1500);
+    } catch (err) {
+      console.error("Create shipment error", err);
+      setError(err.message || "Failed to create shipment");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  function saveDraft() {
-    localStorage.setItem(
-      "agritrace-shipment-draft",
-      JSON.stringify(form)
-    );
-
-    setMessage("Shipment draft saved locally.");
+  if (loading) {
+    return <LoadingSpinner />;
   }
 
   return (
     <div className="page-container">
-
-      {message && (
+      {error && (
+        <EmptyState
+          title="Creation failed"
+          description={error}
+          action={<button className="btn primary small" onClick={() => setError(null)}>Dismiss</button>}
+        />
+      )}
+      {success && (
         <div className="success-banner">
-          {message}
+          {success}
         </div>
       )}
 
-      <form
-        className="form-shell"
-        onSubmit={handleSubmit}
-      >
-
+      <form className="form-shell" onSubmit={handleSubmit}>
         <FormSection
           icon={<FaBox />}
           title="Product Information"
@@ -130,7 +196,7 @@ function CreateShipment() {
             name="batchId"
             value={form.batchId}
             onChange={handleChange}
-            readOnly
+            placeholder="Auto-generated if left blank"
           />
 
           <Input
@@ -172,19 +238,6 @@ function CreateShipment() {
           icon={<FaLocationDot />}
           title="Origin Details"
         >
-          <Select
-  label="Farmer / Organization"
-  name="organization"
-  value={form.organization}
-  onChange={handleChange}
-  options={[
-    "",
-    "ABC Organic Farm",
-    "Sunrise Growers Collective",
-    "Ganga Valley Farms",
-  ]}
-/>
-
           <Input
             label="Farm Name"
             name="farmName"
@@ -289,12 +342,12 @@ function CreateShipment() {
           />
 
           <Input
-  label="Expected Delivery Date"
-  type="date"
-  name="deliveryDate"
-  value={form.deliveryDate}
-  onChange={handleChange}
-/>
+            label="Expected Delivery Date"
+            type="date"
+            name="deliveryDate"
+            value={form.deliveryDate}
+            onChange={handleChange}
+          />
 
           <Select
             label="Transport Type"
@@ -373,7 +426,6 @@ function CreateShipment() {
           icon={<FaMicrochip />}
           title="Assign IoT Device"
         >
-
           <Select
             label="Available Device"
             name="deviceId"
@@ -381,35 +433,23 @@ function CreateShipment() {
             onChange={handleChange}
             options={[
               "",
-              ...availableDevices.map(
-                (device) => device.id
-              ),
+              ...devices
+                .filter((device) => !device.currentShipmentId)
+                .map((device) => device.deviceId || device.id),
             ]}
           />
-
         </FormSection>
 
         <div className="form-actions">
-
           <button
-            type="button"
-            className="btn secondary"
-            onClick={saveDraft}
-          >
-            Save Draft
-          </button>
-
-          <button
-            className="btn primary"
             type="submit"
+            className="btn primary"
+            disabled={submitting}
           >
-            Create Shipment
+            {submitting ? "Creating..." : "Create Shipment"}
           </button>
-
         </div>
-
       </form>
-
     </div>
   );
 }
@@ -471,7 +511,7 @@ function Select({
             value={option}
             key={option || "none"}
           >
-            {option || "Select organization"}
+            {option || "Select"}
           </option>
         ))}
       </select>

@@ -10,7 +10,7 @@ import {
 
 import { listShipments } from "../../api/shipmentApi";
 import LoadingSpinner from "../../components/common/LoadingSpinner";
-import ErrorState from "../../components/common/ErrorState";
+import EmptyState from "../../components/common/EmptyState";
 import { useAuth } from "../../context/AuthContext";
 
 function getStatusClass(status) {
@@ -39,26 +39,25 @@ function ActiveShipments() {
   const [view, setView] = useState("grid");
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setEmpty] = useState(null);
 
   // Fetch shipments whenever filters change
   useEffect(() => {
     setLoading(true);
-    setError(null);
+    setEmpty(null);
     const params = {};
     if (status) params.status = status;
     if (product) params.product = product;
     if (search) params.search = search;
     if (sort) params.sort = sort;
     listShipments(params)
-      .then((res) => {
-        // Assuming backend returns { shipments: [...] }
-        setShipments(res.data.shipments || []);
+      .then((data) => {
+        setShipments(data ?? []);
         setLoading(false);
       })
       .catch((err) => {
         console.error(err);
-        setError(err);
+        setEmpty(err);
         setLoading(false);
       });
   }, [status, product, search, sort]);
@@ -77,7 +76,7 @@ function ActiveShipments() {
 
   if (error) {
     return (
-      <ErrorState
+      <EmptyState
         message="Failed to load shipments"
         retry={() => setLoading(true)}
       />
@@ -156,10 +155,10 @@ function ActiveShipments() {
                 <span>{shipment.destination}</span>
               </div>
               <div className="sc-stats">
-                <div className="sc-stat"><span>Temp</span><strong>{shipment.temp}°C</strong></div>
-                <div className="sc-stat"><span>Humidity</span><strong>{shipment.humidity}%</strong></div>
-                <div className="sc-stat"><span>Gas</span><strong>{shipment.gas}</strong></div>
-                <div className="sc-stat"><span>Battery</span><strong>{shipment.battery}%</strong></div>
+                <div className="sc-stat"><span>Temp</span><strong>{shipment.temperature !== undefined ? `${shipment.temperature}°C` : '--'}</strong></div>
+                <div className="sc-stat"><span>Humidity</span><strong>{shipment.humidity !== undefined ? `${shipment.humidity}%` : '--'}</strong></div>
+                <div className="sc-stat"><span>Gas</span><strong>{shipment.gas ?? '--'}</strong></div>
+                <div className="sc-stat"><span>Battery</span><strong>{shipment.battery !== undefined ? `${shipment.battery}%` : '--'}</strong></div>
               </div>
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width: `${shipment.progress}%` }} />
