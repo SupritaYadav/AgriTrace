@@ -16,6 +16,7 @@ const Register = () => {
   const [formData, setFormData] = useState({
     name: "",
     company: "",
+    role: "FARMER",
     email: "",
     password: "",
     confirmPassword: "",
@@ -63,7 +64,8 @@ const Register = () => {
       await register(
         formData.name,
         formData.email,
-        formData.password
+        formData.password,
+        formData.role
       );
 
       navigate("/dashboard");
@@ -90,8 +92,10 @@ const Register = () => {
           break;
 
         default:
+          // Backend profile errors (e.g. invalid role) carry a `message`.
           setError(
-            "Unable to create account. Please try again."
+            error.message ||
+              "Unable to create account. Please try again."
           );
       }
     } finally {
@@ -178,17 +182,33 @@ const Register = () => {
               </div>
             </div>
 
-            <div className="form-group">
-              <label>Email Address</label>
+            <div className="auth-two-column">
+              <div className="form-group">
+                <label>Email Address</label>
 
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="you@company.com"
-                required
-              />
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder="you@company.com"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Role</label>
+
+                <select
+                  name="role"
+                  value={formData.role}
+                  onChange={handleChange}
+                >
+                  <option value="FARMER">Farmer</option>
+                  <option value="TRANSPORTER">Transporter</option>
+                  <option value="WAREHOUSE">Warehouse Manager</option>
+                </select>
+              </div>
             </div>
 
             <div className="auth-two-column">

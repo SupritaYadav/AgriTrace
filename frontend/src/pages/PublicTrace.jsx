@@ -1,98 +1,68 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-
-const mockTrace = {
-  trackingId: "AGR-2026-0001",
-  product: "Organic Tomatoes",
-  batch: "BAT-240826",
-  origin: "Green Valley Farm, Nashik",
-  destination: "FreshMart Distribution Centre, Delhi",
-  status: "Delivered",
-  harvested: "26 Aug 2026",
-  packed: "27 Aug 2026",
-  dispatched: "28 Aug 2026",
-  delivered: "30 Aug 2026",
-
-  temperature: "4.8°C",
-  humidity: "68%",
-  ethylene: "0.31 ppm",
-
-  blockchainHash:
-    "0x4f71a825be934fa019284663749118af8438",
-
-  journey: [
-    {
-      title: "Harvested",
-      location: "Green Valley Farm, Nashik",
-      date: "26 Aug 2026 • 07:30 AM",
-      description:
-        "Produce harvested and batch identity created.",
-    },
-    {
-      title: "Quality Inspection",
-      location: "Nashik Collection Centre",
-      date: "26 Aug 2026 • 11:15 AM",
-      description:
-        "Quality inspection completed successfully.",
-    },
-    {
-      title: "Cold Storage",
-      location: "Nashik Cold Storage",
-      date: "27 Aug 2026 • 02:20 PM",
-      description:
-        "Temperature-controlled storage initiated.",
-    },
-    {
-      title: "Transport",
-      location: "Nashik → Delhi",
-      date: "28 Aug 2026 • 06:00 AM",
-      description:
-        "IoT monitoring enabled during transportation.",
-    },
-    {
-      title: "Delivered",
-      location: "FreshMart Distribution Centre",
-      date: "30 Aug 2026 • 09:40 AM",
-      description:
-        "Shipment received and verified.",
-    },
-  ],
-};
+import { useParams, useNavigate } from "react-router-dom";
+import { getPublicTrace } from "../api/traceabilityApi";
 
 const PublicTrace = () => {
   const { trackingId } = useParams();
+  const navigate = useNavigate();
 
-  const [searchId, setSearchId] = useState(
-    trackingId || ""
-  );
+  const [searchId, setSearchId] = useState(trackingId || "");
+  const [trace, setTrace] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const [trace, setTrace] = useState(
-    trackingId ? mockTrace : null
-  );
+  const fetchTrace = async (id) => {
+    if (!id.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getPublicTrace(id.trim());
+      setTrace(data);
+    } catch (err) {
+      if (err.status === 404) {
+        setError("Tracking ID not found. Please verify the ID and try again.");
+      } else if (err.status === null) {
+        setError("Network error - please check your connection.");
+      } else {
+        setError(err.message || "Failed to fetch trace data.");
+      }
+      setTrace(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (trackingId) {
-      // eslint-disable-next-line
-      setSearchId(trackingId);
-
-      // Backend API will replace this:
-      // eslint-disable-next-line
-      setTrace({
-        ...mockTrace,
-        trackingId,
-      });
+      fetchTrace(trackingId);
     }
   }, [trackingId]);
 
   const handleSearch = (event) => {
     event.preventDefault();
-
     if (!searchId.trim()) return;
+    navigate(`/trace/${searchId.trim()}`);
+  };
 
-    setTrace({
-      ...mockTrace,
-      trackingId: searchId,
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "—";
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
+  };
+
+  const getStatusClass = (status) => {
+    if (!status) return "";
+    const s = status.toLowerCase();
+    if (s.includes("deliver")) return "positive-text";
+    if (s.includes("transit") || s.includes("ship")) return "";
+    if (s.includes("delay")) return "alert-text";
+    return "positive-text";
   };
 
   return (
@@ -201,6 +171,10 @@ const PublicTrace = () => {
           font-size: 14px;
           cursor: pointer;
         }
+        .trace-search button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
         .public-trace-content {
           display: flex;
           flex-direction: column;
@@ -278,6 +252,9 @@ const PublicTrace = () => {
         }
         .positive-text {
           color: #10b981 !important;
+        }
+        .alert-text {
+          color: #f59e0b !important;
         }
         .trace-section {
           background: #ffffff;
@@ -378,6 +355,59 @@ const PublicTrace = () => {
           max-width: 260px;
           word-break: break-all;
         }
+        .error-state {
+          text-align: center;
+          padding: 60px 20px;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 16px;
+        }
+        .error-state h2 {
+          color: #ef4444;
+          margin-bottom: 12px;
+        }
+        .error-state p {
+          color: #64748b;
+          margin-bottom: 24px;
+        }
+        .error-state button {
+          background: #10b981;
+          color: #fff;
+          border: none;
+          padding: 10px 24px;
+          border-radius: 8px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .loading-state {
+          text-align: center;
+          padding: 60px 20px;
+        }
+        .spinner {
+          width: 40px;
+          height: 40px;
+          border: 3px solid #e2e8f0;
+          border-top-color: #10b981;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          margin: 0 auto 16px;
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        .empty-state {
+          text-align: center;
+          padding: 40px 20px;
+        }
+        .data-unavailable {
+          background: #fef3c7;
+          border: 1px solid #fde68a;
+          border-radius: 8px;
+          padding: 12px 16px;
+          color: #92400e;
+          font-size: 13px;
+          margin-bottom: 16px;
+        }
         .public-footer {
           text-align: center;
           font-size: 12px;
@@ -441,13 +471,31 @@ const PublicTrace = () => {
               setSearchId(e.target.value)
             }
             placeholder="Example: AGR-2026-0001"
+            disabled={loading}
           />
 
-          <button type="submit">
-            Trace Product
+          <button type="submit" disabled={loading}>
+            {loading ? "Searching..." : "Trace Product"}
           </button>
         </form>
       </section>
+
+      {loading && (
+        <div className="loading-state">
+          <div className="spinner" />
+          <p>Fetching trace data...</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="error-state">
+          <h2>Trace Not Found</h2>
+          <p>{error}</p>
+          <button onClick={() => navigate("/trace")}>
+            Search Again
+          </button>
+        </div>
+      )}
 
       {trace && (
         <main className="public-trace-content">
@@ -457,17 +505,19 @@ const PublicTrace = () => {
                 ✓ VERIFIED PRODUCT
               </span>
 
-              <h2>{trace.product}</h2>
+              <h2>{trace.productName || "Unknown Product"}</h2>
 
               <p>
                 Trace ID:{" "}
-                <strong>{trace.trackingId}</strong>
+                <strong>{trace.trackingId || trace.shipmentId || "N/A"}</strong>
               </p>
             </div>
 
             <div className="trust-score">
               <span>Trust Score</span>
-              <strong>98</strong>
+              <strong>
+                {trace.integrity?.verified ? "98" : "—"}
+              </strong>
               <small>/ 100</small>
             </div>
           </section>
@@ -475,24 +525,24 @@ const PublicTrace = () => {
           <section className="consumer-info-grid">
             <div>
               <span>Batch</span>
-              <strong>{trace.batch}</strong>
+              <strong>{trace.batchId || trace.trackingId || "N/A"}</strong>
             </div>
 
             <div>
               <span>Origin</span>
-              <strong>{trace.origin}</strong>
+              <strong>{trace.origin || "N/A"}</strong>
             </div>
 
             <div>
               <span>Status</span>
-              <strong className="positive-text">
-                {trace.status}
+              <strong className={getStatusClass(trace.status)}>
+                {trace.status || "Unknown"}
               </strong>
             </div>
 
             <div>
-              <span>Delivered</span>
-              <strong>{trace.delivered}</strong>
+              <span>Updated</span>
+              <strong>{trace.createdAt ? formatDate(trace.createdAt) : "N/A"}</strong>
             </div>
           </section>
 
@@ -504,25 +554,35 @@ const PublicTrace = () => {
               </p>
             </div>
 
-            <div className="timeline">
-              {trace.journey.map((item, index) => (
-                <div
-                  className="timeline-item"
-                  key={index}
-                >
-                  <div className="timeline-marker">
-                    ✓
-                  </div>
+            {trace.timeline && trace.timeline.length > 0 ? (
+              <div className="timeline">
+                {trace.timeline.map((item, index) => (
+                  <div
+                    className="timeline-item"
+                    key={index}
+                  >
+                    <div className="timeline-marker">
+                      ✓
+                    </div>
 
-                  <div className="timeline-content">
-                    <h3>{item.title}</h3>
-                    <strong>{item.location}</strong>
-                    <span>{item.date}</span>
-                    <p>{item.description}</p>
+                    <div className="timeline-content">
+                      <h3>{item.type || "Event"}</h3>
+                      <strong>{item.location || "Unknown location"}</strong>
+                      <span>{item.timestamp ? formatDate(item.timestamp) : "—"}</span>
+                      {item.metadata && (
+                        <p>
+                          {JSON.stringify(item.metadata).replace(/[{}"\]]/g, "").slice(0, 200)}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="data-unavailable">
+                No journey events available for this trace.
+              </div>
+            )}
           </section>
 
           <section className="trace-section">
@@ -534,25 +594,34 @@ const PublicTrace = () => {
               </p>
             </div>
 
-            <div className="consumer-condition-grid">
-              <div>
-                <span>Temperature</span>
-                <strong>{trace.temperature}</strong>
-                <small>Within safe range</small>
-              </div>
+            {trace.latestTelemetry ? (
+              <div className="consumer-condition-grid">
+                <div>
+                  <span>Temperature</span>
+                  <strong>{trace.latestTelemetry.temperature !== undefined ? `${trace.latestTelemetry.temperature}°C` : "N/A"}</strong>
+                  <small>
+                    {trace.latestTelemetry.temperature !== undefined && trace.latestTelemetry.temperature <= 8
+                      ? "Within safe range"
+                      : "Check conditions"}
+                  </small>
+                </div>
 
-              <div>
-                <span>Humidity</span>
-                <strong>{trace.humidity}</strong>
-                <small>Optimal</small>
-              </div>
+                <div>
+                  <span>Humidity</span>
+                  <strong>{trace.latestTelemetry.humidity !== undefined ? `${trace.latestTelemetry.humidity}%` : "N/A"}</strong>
+                  <small>Optimal</small>
+                </div>
 
-              <div>
-                <span>Ethylene</span>
-                <strong>{trace.ethylene}</strong>
-                <small>Normal level</small>
+                <div>
+                  <span>Last Updated</span>
+                  <strong>{trace.latestTelemetry.recordedAt ? formatDate(trace.latestTelemetry.recordedAt) : "N/A"}</strong>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="data-unavailable">
+                No telemetry data available for this shipment.
+              </div>
+            )}
           </section>
 
           <section className="blockchain-proof">
@@ -570,10 +639,18 @@ const PublicTrace = () => {
             </div>
 
             <code>
-              {trace.blockchainHash}
+              {trace.integrity?.checkpoints && trace.integrity.checkpoints.length > 0
+                ? trace.integrity.checkpoints[trace.integrity.checkpoints.length - 1].recordHash
+                : (trace.blockchainHash || "No integrity data available")}
             </code>
           </section>
         </main>
+      )}
+
+      {!loading && !error && !trace && !trackingId && (
+        <div className="empty-state">
+          <p style={{ color: "#64748b" }}>Enter a tracking ID above to view trace details.</p>
+        </div>
       )}
 
       <footer className="public-footer">

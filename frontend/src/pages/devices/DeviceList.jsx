@@ -1,102 +1,99 @@
-import { devices } from "../../data/mockData";
-import { FaWaveSquare } from "react-icons/fa6";
+import React, { useEffect, useState } from "react";
+import { listDevices, assignDeviceToShipment } from "../../api/deviceApi";
+import LoadingSpinner from "../../components/common/LoadingSpinner";
+import EmptyState from "../../components/common/EmptyState";
+import { useAuth } from "../../context/AuthContext";
 import Badge from "../../components/common/Badge";
 
 function DeviceList() {
+  const { role } = useAuth();
+  const [devices, setDevices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState(null);
+
+  const fetchDevices = () => {
+    setLoading(true);
+    setError(null);
+    listDevices()
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        setDevices(list);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setError(err);
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchDevices();
+  }, []);
+
+  const handleAssign = (deviceId) => {
+    const shipmentId = prompt("Enter Shipment ID to assign this device to:");
+    if (!shipmentId) return;
+    setActionLoading(true);
+    setActionError(null);
+    assignDeviceToShipment(deviceId, shipmentId)
+      .then(() => {
+        setActionLoading(false);
+        fetchDevices();
+      })
+      .catch((err) => {
+        console.error(err);
+        setActionError(err);
+        setActionLoading(false);
+      });
+  };
+
+  if (loading) return <LoadingSpinner />;
+  if (error) return <EmptyState message="Failed to load devices" retry={fetchDevices} />;
+
   return (
     <div className="page-container">
-
+      {actionError && <EmptyState message="Action failed" retry={() => setActionError(null)} />}
       <section className="panel">
-
-        <div className="panel-header">
-          <h3>IoT Device Fleet</h3>
-          <p>All registered AgriTrace sensor nodes</p>
-        </div>
-
-        <div className="table-wrapper">
-
-          <table className="data-table">
-
-            <thead>
-              <tr>
-                <th>Device ID</th>
-                <th>Status</th>
-                <th>Assigned Shipment</th>
-                <th>Battery</th>
-                <th>Last Seen</th>
-                <th>Temperature</th>
-                <th>Firmware</th>
-                <th></th>
-              </tr>
-            </thead>
-
-            <tbody>
-
-              {devices.map((device) => (
-                <tr key={device.id}>
-
-                  <td className="mono-id">
-                    {device.id}
-                  </td>
-
+        <div className="panel-header"><h3>Device List</h3></div>
+        <table className="responsive-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Status</th>
+              <th>Battery</th>
+              <th>Last Seen</th>
+              <th>Shipment</th>
+              <th>Firmware</th>
+              {role === "ADMIN" && <th>Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {devices.map((d) => (
+              <tr key={d.deviceId}>
+                <td>{d.deviceId ?? "Unknown"}</td>
+                <td>
+                  <Badge status={d.status === "ONLINE" ? "Online" : "Offline"} />
+                </td>
+                <td>{d.battery != null ? `${d.battery}%` : "—"}</td>
+                <td>{d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : "Location unavailable"}</td>
+                <td>{d.currentShipmentId ?? "Not assigned"}</td>
+                <td>{d.firmwareVersion ?? "—"}</td>
+                {role === "ADMIN" && (
                   <td>
-                    <Badge status={device.status} />
-                  </td>
-
-                  <td>
-                    {device.shipment || "—"}
-                  </td>
-
-                  <td>
-                    <div className="battery-cell">
-
-                      <div className="battery-bar">
-                        <span
-                          style={{
-                            width:
-                              device.battery +
-                              "%",
-                          }}
-                        />
-                      </div>
-
-                      {device.battery}%
-
-                    </div>
-                  </td>
-
-                  <td>
-                    {device.lastSeen}
-                  </td>
-
-                  <td>
-                    {device.temperature}°C
-                  </td>
-
-                  <td>
-                    {device.firmware}
-                  </td>
-
-                  <td>
-                    <button
-                      className="icon-action"
-                      title="View device signal"
-                    >
-                      <FaWaveSquare />
+                    <button className="btn secondary" disabled={actionLoading} onClick={() => handleAssign(d.deviceId)}>
+                      Assign to Shipment
                     </button>
                   </td>
-
-                </tr>
-              ))}
-
-            </tbody>
-
-          </table>
-
-        </div>
-
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {devices.length === 0 && <EmptyState message="No devices found" />}
       </section>
-
     </div>
   );
 }

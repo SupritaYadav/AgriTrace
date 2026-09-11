@@ -25,7 +25,7 @@ export const config = Object.freeze({
   mqttPassword: process.env.MQTT_PASSWORD || "",
   mqttProtocol: process.env.MQTT_PROTOCOL?.trim() || "",
   mqttPort: process.env.MQTT_PORT ? Number(process.env.MQTT_PORT) : null,
-  frontendUrl: process.env.FRONTEND_URL?.trim() || "http://localhost:5173",
+  frontendUrl: process.env.FRONTEND_URL?.trim() || "http://localhost:5174",
   blockchainMode: (process.env.BLOCKCHAIN_MODE || "mock").toLowerCase(),
   blockchainRpcUrl: process.env.BLOCKCHAIN_RPC_URL?.trim() || "",
   blockchainPrivateKey: process.env.BLOCKCHAIN_PRIVATE_KEY?.trim() || "",

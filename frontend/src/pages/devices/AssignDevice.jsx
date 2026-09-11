@@ -1,197 +1,161 @@
-import { useState } from "react";
-import {
-  FaMicrochip,
-  FaBoxOpen,
-  FaArrowRightArrowLeft,
-} from "react-icons/fa6";
-
-import {
-  devices as initialDevices,
-  shipments,
-} from "../../data/mockData";
+import React, { useEffect, useState } from "react";
+import { FaMicrochip, FaBoxOpen, FaArrowRightArrowLeft } from "react-icons/fa6";
+import { listDevices } from "../../api/deviceApi";
+import { listShipments } from "../../api/shipmentApi";
+import { assignDeviceToShipment } from "../../api/deviceApi";
+import LoadingSpinner from "../../components/common/LoadingSpinner";
+import EmptyState from "../../components/common/EmptyState";
 
 function AssignDevice() {
-  const [devices, setDevices] =
-    useState(initialDevices);
+  const [devices, setDevices] = useState([]);
+  const [shipments, setShipments] = useState([]);
+  const [selectedDevice, setSelectedDevice] = useState("");
+  const [selectedShipment, setSelectedShipment] = useState("");
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [assignLoading, setAssignLoading] = useState(false);
 
-  const [selectedDevice, setSelectedDevice] =
-    useState("");
-
-  const [
-    selectedShipment,
-    setSelectedShipment,
-  ] = useState("");
-
-  const [message, setMessage] =
-    useState("");
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [devicesRes, shipmentsRes] = await Promise.all([
+          listDevices(),
+          listShipments(),
+        ]);
+        setDevices(Array.isArray(devicesRes) ? devicesRes : []);
+        setShipments(Array.isArray(shipmentsRes) ? shipmentsRes : []);
+      } catch (err) {
+        console.error(err);
+        setError(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   const availableDevices = devices.filter(
-    (device) => device.status === "Available"
+    (device) => device.status === "AVAILABLE" || !device.currentShipmentId
   );
 
-  const unassignedShipments =
-    shipments.filter(
-      (shipment) => !shipment.device
-    );
+  const unassignedShipments = shipments.filter(
+    (shipment) => !shipment.deviceId && !shipment.currentDeviceId
+  );
 
-  function assignDevice() {
-    if (
-      !selectedDevice ||
-      !selectedShipment
-    ) {
-      setMessage(
-        "Select both a device and shipment."
-      );
+  const handleAssign = async () => {
+    if (!selectedDevice || !selectedShipment) {
+      setMessage("Select both a device and shipment.");
+      setMessageType("error");
       return;
     }
 
-    setDevices((previous) =>
-      previous.map((device) =>
-        device.id === selectedDevice
-          ? {
-              ...device,
-              status: "Assigned",
-              shipment:
-                selectedShipment,
-            }
-          : device
-      )
-    );
+    setAssignLoading(true);
+    setMessage("");
+    try {
+      await assignDeviceToShipment(selectedDevice, selectedShipment);
+      setMessage(`Device ${selectedDevice} assigned to shipment ${selectedShipment}.`);
+      setMessageType("success");
+      setSelectedDevice("");
+      setSelectedShipment("");
+      const [devicesRes, shipmentsRes] = await Promise.all([
+        listDevices(),
+        listShipments(),
+      ]);
+      setDevices(Array.isArray(devicesRes) ? devicesRes : []);
+      setShipments(Array.isArray(shipmentsRes) ? shipmentsRes : []);
+    } catch (err) {
+      console.error(err);
+      setMessage(err.message || "Failed to assign device");
+      setMessageType("error");
+    } finally {
+      setAssignLoading(false);
+    }
+  };
 
-    setMessage(
-      `${selectedDevice} assigned to ${selectedShipment}.`
-    );
-
-    setSelectedDevice("");
-    setSelectedShipment("");
-  }
+  if (loading) return <LoadingSpinner />;
+  if (error) return <EmptyState message="Failed to load data" retry={() => window.location.reload()} />;
 
   return (
     <div className="page-container">
-
       {message && (
-        <div className="status-banner safe">
+        <div className={`status-banner ${messageType === "success" ? "safe" : "warning"}`}>
           {message}
         </div>
       )}
 
       <section className="assign-grid">
-
         <article className="panel">
-
           <div className="panel-header">
-            <h3>
-              Available Devices
-            </h3>
+            <h3>Available Devices</h3>
           </div>
-
           <div className="pick-list">
-
-            {availableDevices.map(
-              (device) => (
+            {availableDevices.length === 0 ? (
+              <EmptyState message="No available devices" icon="⚙️" />
+            ) : (
+              availableDevices.map((device) => (
                 <button
-                  key={device.id}
-                  className={`pick-item ${
-                    selectedDevice ===
-                    device.id
-                      ? "selected"
-                      : ""
-                  }`}
-                  onClick={() =>
-                    setSelectedDevice(
-                      device.id
-                    )
-                  }
+                  key={device.deviceId}
+                  className={`pick-item ${selectedDevice === device.deviceId ? "selected" : ""}`}
+                  onClick={() => setSelectedDevice(device.deviceId)}
                 >
                   <FaMicrochip />
-
                   <div>
-                    <div className="pi-title">
-                      {device.id}
-                    </div>
-
+                    <div className="pi-title">{device.deviceId}</div>
                     <div className="pi-sub">
-                      Battery{" "}
-                      {device.battery}% ·
-                      Last seen{" "}
-                      {device.lastSeen}
+                      Battery {device.battery != null ? `${device.battery}%` : "N/A"} ·
+                      Last seen {device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : "Location unavailable"}
                     </div>
                   </div>
                 </button>
-              )
+              ))
             )}
-
           </div>
-
         </article>
 
         <div className="assign-center">
-
           <FaArrowRightArrowLeft />
-
           <button
             className="btn primary"
-            onClick={assignDevice}
-            disabled={
-              !selectedDevice ||
-              !selectedShipment
-            }
+            onClick={handleAssign}
+            disabled={!selectedDevice || !selectedShipment || assignLoading}
           >
-            Assign Device
+            {assignLoading ? "Assigning..." : "Assign Device"}
           </button>
-
         </div>
 
         <article className="panel">
-
           <div className="panel-header">
-            <h3>
-              Active Shipments Without
-              Devices
-            </h3>
+            <h3>Active Shipments Without Devices</h3>
           </div>
-
           <div className="pick-list">
-
-            {unassignedShipments.map(
-              (shipment) => (
+            {unassignedShipments.length === 0 ? (
+              <EmptyState message="No unassigned shipments" icon="📦" />
+            ) : (
+              unassignedShipments.map((shipment) => (
                 <button
-                  key={shipment.id}
-                  className={`pick-item ${
-                    selectedShipment ===
-                    shipment.id
-                      ? "selected"
-                      : ""
-                  }`}
-                  onClick={() =>
-                    setSelectedShipment(
-                      shipment.id
-                    )
-                  }
+                  key={shipment.shipmentId ?? shipment.id}
+                  className={`pick-item ${selectedShipment === (shipment.shipmentId ?? shipment.id) ? "selected" : ""}`}
+                  onClick={() => setSelectedShipment(shipment.shipmentId ?? shipment.id)}
                 >
                   <FaBoxOpen />
-
                   <div>
-                    <div className="pi-title">
-                      {shipment.id}
-                    </div>
-
+                    <div className="pi-title">{shipment.shipmentId ?? shipment.id}</div>
                     <div className="pi-sub">
-                      {shipment.product} ·{" "}
-                      {shipment.source} →{" "}
-                      {shipment.destination}
+                      {shipment.product ?? "Unknown product"} ·{" "}
+                      {shipment.source ?? "Unknown"} →{" "}
+                      {shipment.destination ?? "Unknown"}
                     </div>
                   </div>
                 </button>
-              )
+              ))
             )}
-
           </div>
-
         </article>
-
       </section>
-
     </div>
   );
 }

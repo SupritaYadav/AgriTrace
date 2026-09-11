@@ -3,7 +3,7 @@ import QRCode from "qrcode";
 import { db } from "../core/firebase.js";
 import { getShipmentForUser } from "./shipmentService.js";
 
-const PUBLIC_TRACE_BASE_URL = process.env.PUBLIC_TRACE_BASE_URL || "http://localhost:5173/trace";
+const PUBLIC_TRACE_BASE_URL = process.env.PUBLIC_TRACE_BASE_URL || "http://localhost:5174/trace";
 
 function normalizeBaseUrl(baseUrl) {
   return baseUrl.replace(/\/+$/, "");

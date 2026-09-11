@@ -1,30 +1,25 @@
+import React from "react";
 import { Link } from "react-router-dom";
 
 import {
   FaBoxOpen,
   FaMicrochip,
   FaTriangleExclamation,
-  FaLeaf,
   FaTemperatureHalf,
   FaDroplet,
-  FaBatteryThreeQuarters,
-  FaTruck,
-  FaWarehouse,
-  FaTractor,
-  FaStore,
-  FaWind,
-  FaEye,
   FaArrowUp,
   FaArrowDown,
   FaMinus,
   FaPlugCircleXmark,
+  FaEye,
+  FaTruck,
 } from "react-icons/fa6";
 
 import { FaCheckCircle } from "react-icons/fa";
 
 import { getDashboardSummary } from "../api/dashboardApi";
 import LoadingSpinner from "../components/common/LoadingSpinner";
-import ErrorState from "../components/common/ErrorState";
+import EmptyState from "../components/common/EmptyState";
 
 function getShipmentBadgeClass(status) {
   switch (status) {
@@ -68,15 +63,12 @@ function Dashboard() {
     fetchData();
   }, []);
 
-// Data from backend dashboard summary provides counts and arrays directly
-// No need to compute from mock data
-
   if (loading) {
     return <LoadingSpinner />;
   }
 
   if (error) {
-    return <ErrorState message="Failed to load dashboard data" retry={() => window.location.reload()} />;
+    return <EmptyState message="Failed to load dashboard data" retry={() => window.location.reload()} />;
   }
 
   const {
@@ -87,14 +79,10 @@ function Dashboard() {
     criticalAlerts,
     averageTemperature,
     averageHumidity,
-    recentShipments,
-    recentAlerts,
   } = dashboard || {};
 
-  // Ensure arrays are defined
-  const displayedRecentShipments = recentShipments || [];
-  const displayedRecentAlerts = recentAlerts || [];
-
+  const displayedRecentShipments = (dashboard?.recentShipments || []);
+  const displayedRecentAlerts = (dashboard?.recentAlerts || []);
 
   const metrics = [
     {
@@ -141,53 +129,12 @@ function Dashboard() {
       trend: "Needs attention",
       trendType: "down",
     },
-
-    {
-      title: "Product Batches",
-      value: 35,
-      icon: <FaLeaf />,
-      iconClass: "purple",
-      trend: "+2 today",
-      trendType: "up",
-    },
-  ];
-
-  const journeyStages = [
-    {
-      label: "Farm",
-      count: 5,
-      icon: <FaTractor />,
-    },
-
-    {
-      label: "Collection Center",
-      count: 3,
-      icon: <FaWarehouse />,
-    },
-
-    {
-      label: "Transport",
-      count: 5,
-      icon: <FaTruck />,
-    },
-
-    {
-      label: "Warehouse",
-      count: 1,
-      icon: <FaWarehouse />,
-    },
-
-    {
-      label: "Retailer",
-      count: 1,
-      icon: <FaStore />,
-    },
   ];
 
   // Use displayed recent data
   const recentShipments = displayedRecentShipments;
 
-  const recentAlerts = displayedRecentAlerts;
+  // Removed duplicate assignment; recentAlerts already defined from dashboard data
 
 
   const renderTrendIcon = (type) => {
@@ -203,11 +150,11 @@ function Dashboard() {
   };
 
   const getAlertIconClass = (alert) => {
-    if (alert.type === "Device") {
+    if (alert.type === "DEVICE_OFFLINE" || alert.type === "LOW_BATTERY" || alert.type === "TAMPER_ALERT") {
       return "device";
     }
 
-    if (alert.severity === "Critical") {
+    if (alert.severity === "CRITICAL") {
       return "critical";
     }
 
@@ -271,51 +218,10 @@ function Dashboard() {
       </section>
 
       {/* =========================
-          SUPPLY CHAIN + ENVIRONMENT
+          ENVIRONMENT
       ========================= */}
 
       <section className="grid-2col">
-        {/* Supply chain */}
-
-        <article className="card panel dashboard-journey-panel">
-          <div className="panel-head">
-            <h3>Supply Chain Overview</h3>
-
-            <span className="muted-text">
-              Live shipment distribution by stage
-            </span>
-          </div>
-
-          <div className="journey-track">
-            {journeyStages.map(
-              (stage, index) => (
-                <div
-                  className="journey-node"
-                  key={stage.label}
-                >
-                  {index !==
-                    journeyStages.length - 1 && (
-                    <div className="journey-line" />
-                  )}
-
-                  <div className="jn-icon">
-                    {stage.icon}
-                  </div>
-
-                  <div className="jn-count">
-                    {stage.count}
-                  </div>
-
-                  <div className="jn-label">
-                    {stage.label}
-                  </div>
-                </div>
-              )
-            )}
-          </div>
-        </article>
-
-        {/* Environmental */}
 
         <article className="card panel dashboard-environment-panel">
           <div className="panel-head">
@@ -331,7 +237,7 @@ function Dashboard() {
               <FaTemperatureHalf />
 
               <div className="env-value">
-                23.6°C
+                {averageTemperature != null ? `${averageTemperature.toFixed(1)}°C` : '--'}
               </div>
 
               <div className="env-label">
@@ -343,39 +249,16 @@ function Dashboard() {
               <FaDroplet />
 
               <div className="env-value">
-                64%
+                {averageHumidity != null ? `${averageHumidity.toFixed(1)}%` : '--'}
               </div>
 
               <div className="env-label">
                 Average Humidity
               </div>
             </div>
-
-            <div className="env-item">
-              <FaWind />
-
-              <div className="env-value">
-                Normal
-              </div>
-
-              <div className="env-label">
-                Average Gas Level
-              </div>
-            </div>
-
-            <div className="env-item">
-              <FaBatteryThreeQuarters />
-
-              <div className="env-value">
-                78%
-              </div>
-
-              <div className="env-label">
-                Device Battery Health
-              </div>
-            </div>
           </div>
         </article>
+
       </section>
 
       {/* =========================
@@ -408,7 +291,6 @@ function Dashboard() {
                   <th>Destination</th>
                   <th>Device</th>
                   <th>Status</th>
-                  <th>Temp</th>
                   <th>Updated</th>
                   <th></th>
                 </tr>
@@ -417,27 +299,27 @@ function Dashboard() {
               <tbody>
                 {recentShipments.map(
                   (shipment) => (
-                    <tr key={shipment.id}>
+                    <tr key={shipment.shipmentId || shipment.id}>
                       <td>
                         <span className="mono-id">
-                          {shipment.id}
+                          {shipment.shipmentId || shipment.id}
                         </span>
                       </td>
 
                       <td>
-                        {shipment.product}
+                        {shipment.product || '—'}
                       </td>
 
                       <td>
-                        {shipment.source}
+                        {shipment.source || '—'}
                       </td>
 
                       <td>
-                        {shipment.destination}
+                        {shipment.destination || '—'}
                       </td>
 
                       <td>
-                        {shipment.device || "—"}
+                        {shipment.assignedDevice || shipment.device || "—"}
                       </td>
 
                       <td>
@@ -451,16 +333,12 @@ function Dashboard() {
                       </td>
 
                       <td>
-                        {shipment.temp}°C
-                      </td>
-
-                      <td>
-                        {shipment.updated}
+                        {shipment.updatedAt ? new Date(shipment.updatedAt).toLocaleString() : '—'}
                       </td>
 
                       <td>
                         <Link
-                          to={`/shipments/${shipment.id}`}
+                          to={`/shipments/${shipment.shipmentId || shipment.id}`}
                           className="icon-action"
                           title="View shipment"
                         >
@@ -498,10 +376,10 @@ function Dashboard() {
               return (
                 <div
                   className={`alert-row ${iconClass}`}
-                  key={alert.id}
+                  key={alert.alertId || alert.id}
                 >
                   <div className="ai">
-                    {alert.type === "Device" ? (
+                    {alert.type === "DEVICE_OFFLINE" || alert.type === "LOW_BATTERY" || alert.type === "TAMPER_ALERT" ? (
                       <FaMicrochip />
                     ) : (
                       <FaTriangleExclamation />
@@ -510,17 +388,16 @@ function Dashboard() {
 
                   <div className="alert-content">
                     <div className="alert-title">
-                      {alert.title}
+                      {alert.type?.replace(/_/g, ' ') || 'Alert'}
                     </div>
 
                     <div className="alert-sub">
-                      {alert.shipment} ·{" "}
-                      {alert.detail}
+                      {alert.shipmentId || alert.deviceId || '—'} · {alert.value != null ? alert.value : alert.threshold?.limit ?? '—'}
                     </div>
                   </div>
 
                   <div className="alert-time">
-                    {alert.time}
+                    {alert.createdAt ? new Date(alert.createdAt).toLocaleString() : '—'}
                   </div>
                 </div>
               );
