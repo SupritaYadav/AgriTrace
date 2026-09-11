@@ -50,6 +50,12 @@ function ShipmentDetails() {
   const [actionError, setActionError] = useState(null);
 
   const fetchData = async () => {
+    if (!id) {
+      setError("Shipment ID is missing");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {

@@ -12,6 +12,7 @@ const Analytics = () => {
   const [alertCounts, setAlertCounts] = useState({ open: 0, resolved: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [dashboardAvgDeliveryTime, setDashboardAvgDeliveryTime] = useState("—");
 
   useEffect(() => {
     const loadAnalytics = async () => {
@@ -26,13 +27,28 @@ const Analytics = () => {
         ]);
         setSummary(summaryRes ?? null);
 
-        const allShipments = Array.isArray(shipmentsRes) ? shipmentsRes : [];
+         const allShipments = Array.isArray(shipmentsRes) ? shipmentsRes : [];
         const counts = { total: allShipments.length };
         for (const s of allShipments) {
           const st = s.status || "Unknown";
           counts[st] = (counts[st] || 0) + 1;
         }
         setShipmentCounts(counts);
+
+        const delivered = allShipments.filter(
+          (s) => s.status === "DELIVERED" && s.createdAt && s.updatedAt
+        );
+        if (delivered.length > 0) {
+          const totalHours = delivered.reduce((sum, s) => {
+            const start = new Date(s.createdAt).getTime();
+            const end = new Date(s.updatedAt).getTime();
+            return sum + (end - start) / (1000 * 3600);
+          }, 0);
+          const avg = (totalHours / delivered.length).toFixed(1);
+          setDashboardAvgDeliveryTime(`${avg} hr`);
+        } else {
+          setDashboardAvgDeliveryTime("—");
+        }
 
         const allDevices = Array.isArray(devicesRes) ? devicesRes : [];
         setDeviceStatus({
@@ -97,15 +113,36 @@ const Analytics = () => {
       return { label, value, color: colors[label] || "#94a3b8" };
     });
 
-  const shipmentsPerWeek = [
-    { label: "Mon", value: Math.floor((shipmentCounts.total || 0) * 0.12) },
-    { label: "Tue", value: Math.floor((shipmentCounts.total || 0) * 0.16) },
-    { label: "Wed", value: Math.floor((shipmentCounts.total || 0) * 0.13) },
-    { label: "Thu", value: Math.floor((shipmentCounts.total || 0) * 0.21) },
-    { label: "Fri", value: Math.floor((shipmentCounts.total || 0) * 0.18) },
-    { label: "Sat", value: Math.floor((shipmentCounts.total || 0) * 0.10) },
-    { label: "Sun", value: Math.floor((shipmentCounts.total || 0) * 0.10) },
-  ];
+  const computeShipmentTrend = (shipments) => {
+    if (!shipments || shipments.length === 0) return [];
+    const now = new Date();
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const weeksAgo = 7;
+    const buckets = Array.from({ length: weeksAgo }, (_, i) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() - (weeksAgo - 1 - i) * 7);
+      d.setHours(0, 0, 0, 0);
+      return { start: d, count: 0 };
+    });
+    const bucketSizeMs = 7 * 24 * 60 * 60 * 1000;
+    for (const s of shipments) {
+      const ts = new Date(s.createdAt || s.timestamp || 0).getTime();
+      for (const bucket of buckets) {
+        if (ts >= bucket.start.getTime() && ts < bucket.start.getTime() + bucketSizeMs) {
+          bucket.count++;
+          break;
+        }
+      }
+    }
+    return buckets.map((b, i) => ({
+      label: days[b.start.getDay()],
+      value: b.count,
+    }));
+  };
+
+  const shipmentsPerWeek = computeShipmentTrend(
+    Array.isArray(summary?.recentShipments) ? summary.recentShipments : []
+  );
 
   return (
     <div className="analytics-page-container">
@@ -340,13 +377,13 @@ const Analytics = () => {
           </div>
 
           <div className="analytics-stat-card">
-            <div className="analytics-stat-icon cyan">
-              <i className="fa-solid fa-clock"></i>
-            </div>
-            <div className="analytics-stat-content">
-              <span className="analytics-stat-label">Average Delivery Time</span>
-              <h2>14.2 hr</h2>
-            </div>
+          <div className="analytics-stat-icon cyan">
+            <i className="fa-solid fa-clock"></i>
+          </div>
+          <div className="analytics-stat-content">
+            <span className="analytics-stat-label">Average Delivery Time</span>
+            <h2>{dashboardAvgDeliveryTime}</h2>
+          </div>
           </div>
 
           <div className="analytics-stat-card">
@@ -383,11 +420,11 @@ const Analytics = () => {
                 fill="none"
                 stroke="#3b82f6"
                 strokeWidth="3"
-                points={getLinePoints(shipmentsPerWeek, 160, 40)}
+                points={getLinePoints(shipmentsPerWeek, 160, null)}
               />
               {(shipmentsPerWeek || []).map((item, idx) => {
                 const x = 40 + (idx / (shipmentsPerWeek.length - 1)) * 420;
-                const y = 160 - 30 - ((item.value - 0) / (40 - 0)) * 100;
+                const y = 160 - 30 - ((item.value - 0) / (Math.max(...shipmentsPerWeek.map((d) => d.value), 1) - 0)) * 100;
                 return (
                   <g key={idx}>
                     <circle cx={x} cy={y} r="4" className="analytics-chart-node" />

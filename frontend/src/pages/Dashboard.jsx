@@ -81,6 +81,7 @@ function Dashboard() {
     criticalAlerts,
     averageTemperature,
     averageHumidity,
+    recentAlerts
   } = dashboard || {};
 
   const displayedRecentShipments = (dashboard?.recentShipments || []);

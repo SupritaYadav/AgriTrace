@@ -31,6 +31,16 @@ const STATUS_LABEL = {
   pending: "Pending",
 };
 
+function displayValue(value, fallback = "—") {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (typeof value === "object") {
+    return Object.entries(value)
+      .map(([key, entry]) => `${key}: ${typeof entry === "object" ? JSON.stringify(entry) : entry}`)
+      .join(", ");
+  }
+  return String(value);
+}
+
 function Traceability() {
   const [shipments, setShipments] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -175,8 +185,8 @@ function Traceability() {
                     key={shipment.id}
                     value={shipment.id}
                   >
-                    {shipment.id} —{" "}
-                    {shipment.productName || shipment.product}
+                    {displayValue(shipment.id)} —{" "}
+                    {displayValue(shipment.productName || shipment.product, "Unknown product")}
                   </option>
                 )
               )}
@@ -228,11 +238,11 @@ function Traceability() {
 
                     <div className="tl-body">
                       <div className="tl-title">
-                        {event.type || "Event"}
+                        {displayValue(event.type, "Event")}
                       </div>
 
                       <div className="tl-sub">
-                        {event.location || "Unknown location"}
+                        {displayValue(event.location, "Unknown location")}
                       </div>
 
                       <div className="tl-time">
@@ -357,16 +367,16 @@ function Traceability() {
             {qrData && (
               <dl className="qr-meta">
                 <dt>Shipment ID:</dt>
-                <dd>{qrData.trackingId || selectedId}</dd>
+                <dd>{displayValue(qrData.trackingId || selectedId)}</dd>
 
                 <dt>Product:</dt>
-                <dd>{shipment?.productName || shipment?.product || "N/A"}</dd>
+                <dd>{displayValue(shipment?.productName || shipment?.product, "N/A")}</dd>
 
                 <dt>Source:</dt>
-                <dd>{shipment?.source || "N/A"}</dd>
+                <dd>{displayValue(shipment?.source, "N/A")}</dd>
 
                 <dt>Destination:</dt>
-                <dd>{shipment?.destination || "N/A"}</dd>
+                <dd>{displayValue(shipment?.destination, "N/A")}</dd>
               </dl>
             )}
 

@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 
 import { useAuth } from "../context/AuthContext";
 import { listShipments } from "../api/shipmentApi";
+import { updateUserProfile } from "../api/authApi";
 
 const Profile = () => {
-  const { user, profile, profileLoading } = useAuth();
+   const { user, profile, role, profileLoading, refreshProfile } = useAuth();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -29,16 +30,16 @@ const Profile = () => {
 
   useEffect(() => {
     if (!user) return;
-    setFormData({
-      name: user.displayName || profile?.name || "",
-      email: user.email || profile?.email || "",
-      phone: profile?.phone || "",
-      role: profile?.role || "",
-      orgName: profile?.organisation || "",
-      orgType: "",
-      state: profile?.address?.state || "",
-      district: profile?.address?.district || "",
-    });
+       setFormData({
+        name: profile?.name || user?.displayName || "",
+        email: profile?.email || user?.email || "",
+        phone: profile?.phone || "",
+        role: role || profile?.role || "",
+        orgName: profile?.organisation || "",
+        orgType: profile?.type || "",
+        state: profile?.address?.state || "",
+        district: profile?.address?.district || "",
+      });
   }, [user, profile]);
 
   useEffect(() => {
@@ -74,11 +75,28 @@ const Profile = () => {
     setToggles((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setMessage("Profile updated successfully.");
-    setTimeout(() => setMessage(""), 3000);
-  };
+   const handleSubmit = async (e) => {
+     e.preventDefault();
+     try {
+       const updates = {
+         name: formData.name,
+         phone: formData.phone,
+         organisation: formData.orgName,
+         address: formData.state || formData.district ? {
+           state: formData.state,
+           district: formData.district,
+         } : undefined,
+       };
+       await updateUserProfile(updates);
+       await refreshProfile();
+       setMessage("Profile updated successfully.");
+       setTimeout(() => setMessage(""), 3000);
+     } catch (err) {
+       console.error("Failed to update profile", err);
+       setMessage(err.message || "Failed to update profile.");
+       setTimeout(() => setMessage(""), 5000);
+     }
+   };
 
   if (!user) {
     return (
@@ -330,7 +348,7 @@ const Profile = () => {
             <button
               type="button"
               className="custom-secondary-btn"
-              onClick={() => alert("Password reset link sent to email.")}
+              onClick={() => setMessage("Password reset link sent to email.")}
             >
               Change Password
             </button>

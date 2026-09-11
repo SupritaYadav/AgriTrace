@@ -15,6 +15,14 @@ const FILTERS = [
   "Resolved",
 ];
 
+function formatThreshold(threshold) {
+  if (threshold === null || threshold === undefined) return "—";
+  if (typeof threshold !== "object") return String(threshold);
+
+  const { field, operator, limit } = threshold;
+  return [field, operator, limit].filter((value) => value !== undefined).join(" ");
+}
+
 function Alerts() {
   const navigate = useNavigate();
   const { role } = useAuth();
@@ -148,7 +156,7 @@ function Alerts() {
                   {alert.shipmentId ? `Shipment: ${alert.shipmentId}` : "No shipment"}
                   {alert.value != null && alert.threshold != null && (
                     <>
-                      · Value: {alert.value} · Threshold: {alert.threshold}
+                      · Value: {alert.value} · Threshold: {formatThreshold(alert.threshold)}
                     </>
                   )}
                 </div>
