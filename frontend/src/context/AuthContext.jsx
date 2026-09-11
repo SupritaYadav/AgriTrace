@@ -38,7 +38,7 @@ export const AuthProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
-  // Fetch the backend (Firestore) profile whenever the Firebase user changes.
+   // Fetch the backend (MongoDB) profile whenever the Firebase user changes.
   useEffect(() => {
     let cancelled = false;
 
@@ -53,11 +53,12 @@ export const AuthProvider = ({ children }) => {
       setProfileLoading(true);
       setProfileError(null);
       try {
-        // Returns { uid, email, profile } where `profile` is the Firestore
+        // Returns { uid, email, profile } where `profile` is the MongoDB
         // user document (with `role`) or null if it has not been created yet.
         const data = await getCurrentUser();
         if (cancelled) return;
         setProfile(data?.profile ?? null);
+        setProfileError(null);
       } catch (err) {
         if (cancelled) return;
         console.error('Failed to fetch user profile', err);
@@ -74,22 +75,38 @@ export const AuthProvider = ({ children }) => {
     };
   }, [user]);
 
+  const refreshProfile = async () => {
+    if (!user) return;
+    setProfileLoading(true);
+    try {
+      const data = await getCurrentUser();
+      setProfile(data?.profile ?? null);
+      setProfileError(null);
+    } catch (err) {
+      console.error('Failed to refresh profile', err);
+      setProfileError(err);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
   // Auto-provision a FARMER profile when a user logs in without one.
   useEffect(() => {
-    if (!user || profile !== null || profileLoading) return;
-    let cancelled = false;
+    if (!user || profile !== null || profileLoading || profileError) return;
+    let cancelled = true;
     const provision = async () => {
       try {
         await registerProfile("FARMER");
+        await refreshProfile();
       } catch (err) {
-        if (!cancelled && err.status !== 409) {
+        if (cancelled && err.status !== 409) {
           console.error("Failed to auto-provision profile", err);
         }
       }
     };
     provision();
-    return () => { cancelled = true; };
-  }, [user, profile, profileLoading]);
+    return () => { cancelled = false; };
+  }, [user, profile, profileLoading, profileError]);
 
   const login = async (email, password) => {
     return await loginUser(email, password);
@@ -122,20 +139,21 @@ export const AuthProvider = ({ children }) => {
     setProfileError(null);
   };
 
-  const value = {
-    user,
-    profile,
-    role: profile?.role ?? null,
-    profileExists: profile != null,
-    authLoading: firebaseLoading || profileLoading,
-    firebaseLoading,
-    profileLoading,
-    profileError,
-    login,
-    register,
-    logout,
-    isAuthenticated: !!user,
-  };
+   const value = {
+     user,
+     profile,
+     role: profile?.role ?? null,
+     profileExists: profile != null,
+     authLoading: firebaseLoading || profileLoading,
+     firebaseLoading,
+     profileLoading,
+     profileError,
+     login,
+     register,
+     logout,
+     refreshProfile,
+     isAuthenticated: !!user,
+   };
 
   return (
     <AuthContext.Provider value={value}>
