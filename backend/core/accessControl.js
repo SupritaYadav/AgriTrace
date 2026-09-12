@@ -89,14 +89,31 @@ export async function getAccessibleDeviceIds(user) {
     .map((s) => s.assignedDevice)
     .filter(Boolean);
 
-  const ownedDeviceFilter = { ownerId: user.uid };
-  const assignedDeviceFilter =
-    assignedDeviceIds.length > 0
-      ? { deviceId: { $in: assignedDeviceIds } }
-      : { _id: null };
+  if (assignedDeviceIds.length === 0 && user.role !== Role.FARMER) {
+    return [];
+  }
+
+  const deviceFilters = [];
+
+  if (assignedDeviceIds.length > 0) {
+    deviceFilters.push({ deviceId: { $in: assignedDeviceIds } });
+  }
+
+  if (user.role === Role.FARMER) {
+    deviceFilters.push({ ownerId: user.uid });
+  }
+
+  if (deviceFilters.length === 0) {
+    return [];
+  }
 
   const devices = await getCollection("devices")
-    .find({ $or: [ownedDeviceFilter, assignedDeviceFilter] }, { projection: { _id: 0, deviceId: 1 } })
+    .find(
+      deviceFilters.length === 1
+        ? deviceFilters[0]
+        : { $or: deviceFilters },
+      { projection: { _id: 0, deviceId: 1 } }
+    )
     .toArray();
 
   return devices.map((d) => d.deviceId);
