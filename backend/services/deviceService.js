@@ -1,5 +1,8 @@
 import { getCollection } from "../core/mongo.js";
 import { getTelemetryCollection } from "../core/mongo.js";
+import { buildDeviceAccessFilter, canAccessDevice, getAccessibleShipmentIds } from "../core/accessControl.js";
+import { buildShipmentAccessFilter, canAccessShipment } from "../core/accessControl.js";
+import { Role } from "../core/roles.js";
 
 export async function registerDevice(data) {
   const devices = getCollection("devices");
@@ -31,22 +34,42 @@ export async function registerDevice(data) {
   return deviceData;
 }
 
+export async function listDevicesForUser(user) {
+  const devices = getCollection("devices");
+  const filter = await buildDeviceAccessFilter(user);
+  return devices.find(filter).sort({ createdAt: -1 }).toArray();
+}
+
 export async function listDevices() {
   const devices = getCollection("devices");
   return devices.find({}).toArray();
+}
+
+export async function getDeviceForUser(deviceId, user) {
+  const filter = await buildDeviceAccessFilter(user);
+  return getCollection("devices").findOne({ deviceId, ...filter });
 }
 
 export async function getDevice(deviceId) {
   return getCollection("devices").findOne({ deviceId });
 }
 
+export async function getDeviceHealthForUser(deviceId, user) {
+  const device = await getDeviceForUser(deviceId, user);
+  if (!device) return null;
+  return buildDeviceHealthResponse(device);
+}
+
 export async function getDeviceHealth(deviceId) {
   const device = await getDevice(deviceId);
   if (!device) return null;
+  return buildDeviceHealthResponse(device);
+}
 
+async function buildDeviceHealthResponse(device) {
   const telemetryCollection = getTelemetryCollection();
   const latestTelemetry = await telemetryCollection.findOne(
-    { deviceId },
+    { deviceId: device.deviceId },
     { sort: { timestamp: -1 } }
   );
 
@@ -70,7 +93,7 @@ export async function getDeviceHealth(deviceId) {
   };
 }
 
-export async function assignDevice(deviceId, shipmentId, actorId) {
+export async function assignDevice(deviceId, shipmentId, actorId, actorRole = null) {
   const devices = getCollection("devices");
   const shipments = getCollection("shipments");
 
@@ -81,7 +104,8 @@ export async function assignDevice(deviceId, shipmentId, actorId) {
     throw error;
   }
 
-  const shipment = await shipments.findOne({ shipmentId });
+  const shipmentAccess = buildShipmentAccessFilter({ uid: actorId, role: actorRole });
+  const shipment = await shipments.findOne({ shipmentId, ...shipmentAccess });
   if (!shipment) {
     const error = new Error("Shipment not found");
     error.code = "SHIPMENT_NOT_FOUND";
@@ -121,7 +145,6 @@ export async function assignDevice(deviceId, shipmentId, actorId) {
     { $set: { assignedDevice: deviceId, updatedAt: new Date().toISOString() } }
   );
 
-  // Add timeline event
   try {
     const { addTimelineEvent } = await import("./timelineService.js");
     const { TimelineEventType } = await import("../core/timelineEvents.js");

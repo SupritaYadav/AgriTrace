@@ -3,6 +3,7 @@ import { getCollection } from "../core/mongo.js";
 import { Role } from "../core/roles.js";
 import { SHIPMENT_STATUS, ALLOWED_STATUS_TRANSITIONS } from "../utils/constants.js";
 import { addTimelineEvent } from "./timelineService.js";
+import { buildShipmentAccessFilter, canAccessShipment } from "../core/accessControl.js";
 
 export function validateThresholds(thresholds) {
   if (thresholds === undefined || thresholds === null) return;
@@ -121,6 +122,7 @@ export async function createShipment(data, createdBy, role) {
     createdBy,
     transporterId: null,
     warehouseId: null,
+    retailerId: null,
     assignedDevice: null,
     status: SHIPMENT_STATUS.PENDING,
     thresholds,
@@ -187,6 +189,10 @@ export async function updateShipmentStatus(shipmentId, status, actorId, actorRol
 
   if (!shipment) return null;
 
+  const access = buildShipmentAccessFilter({ uid: actorId, role: actorRole });
+  const shipmentWithAccess = await shipments.findOne({ shipmentId, ...access });
+  if (!shipmentWithAccess) return null;
+
   const currentStatus = shipment.status;
   if (currentStatus === status) {
     return shipment;
@@ -202,6 +208,7 @@ export async function updateShipmentStatus(shipmentId, status, actorId, actorRol
       [Role.FARMER]: [SHIPMENT_STATUS.PENDING, SHIPMENT_STATUS.DEVICE_ASSIGNED, SHIPMENT_STATUS.READY_FOR_DISPATCH],
       [Role.TRANSPORTER]: [SHIPMENT_STATUS.IN_TRANSIT, SHIPMENT_STATUS.AT_WAREHOUSE],
       [Role.WAREHOUSE]: [SHIPMENT_STATUS.AT_WAREHOUSE, SHIPMENT_STATUS.DELIVERED],
+      [Role.RETAILER]: [SHIPMENT_STATUS.DELIVERED],
     };
 
     const permittedStatuses = roleMap[actorRole] || [];
@@ -230,132 +237,130 @@ export async function updateShipmentStatus(shipmentId, status, actorId, actorRol
   return shipments.findOne({ shipmentId });
 }
 
-export async function assignTransporter(shipmentId, transporterId, actorId) {
-  const shipments = getCollection("shipments");
+async function validateAssignedUser(targetId, expectedRole) {
   const users = getCollection("users");
+  const userDoc = await users.findOne({ uid: targetId });
+  if (!userDoc || userDoc.role !== expectedRole) {
+    const error = new Error(`Invalid ${expectedRole.toLowerCase()} user`);
+    error.code = "INVALID_ASSIGNMENT";
+    throw error;
+  }
+}
 
-  const shipment = await shipments.findOne({ shipmentId });
-  if (!shipment) return null;
+export async function assignTransporter(shipmentId, transporterId, actorId, actorRole = null) {
+  const shipments = getCollection("shipments");
 
-  const userDoc = await users.findOne({ uid: transporterId });
-  if (!userDoc || userDoc.role !== Role.TRANSPORTER) {
-    throw new Error("Invalid transporter");
+  const access = buildShipmentAccessFilter({ uid: actorId, role: actorRole });
+  const shipment = await shipments.findOne({ shipmentId, ...access });
+  if (!shipment) {
+    const error = new Error("Shipment not found");
+    error.code = "SHIPMENT_NOT_FOUND";
+    throw error;
   }
 
-  await shipments.updateOne(
+  await validateAssignedUser(transporterId, Role.TRANSPORTER);
+
+  const result = await shipments.updateOne(
     { shipmentId },
     { $set: { transporterId, updatedAt: new Date().toISOString() } }
   );
+
+  if (result.matchedCount === 0) {
+    const error = new Error("Shipment not found");
+    error.code = "SHIPMENT_NOT_FOUND";
+    throw error;
+  }
+
   await addTimelineEvent(shipmentId, "TRANSPORTER_ASSIGNED", actorId, { transporterId });
 
   return shipments.findOne({ shipmentId });
 }
 
-export async function assignWarehouse(shipmentId, warehouseId, actorId) {
+export async function assignWarehouse(shipmentId, warehouseId, actorId, actorRole = null) {
   const shipments = getCollection("shipments");
-  const users = getCollection("users");
 
-  const shipment = await shipments.findOne({ shipmentId });
-  if (!shipment) return null;
-
-  const userDoc = await users.findOne({ uid: warehouseId });
-  if (!userDoc || userDoc.role !== Role.WAREHOUSE) {
-    throw new Error("Invalid warehouse");
+  const access = buildShipmentAccessFilter({ uid: actorId, role: actorRole });
+  const shipment = await shipments.findOne({ shipmentId, ...access });
+  if (!shipment) {
+    const error = new Error("Shipment not found");
+    error.code = "SHIPMENT_NOT_FOUND";
+    throw error;
   }
 
-  await shipments.updateOne(
+  await validateAssignedUser(warehouseId, Role.WAREHOUSE);
+
+  const result = await shipments.updateOne(
     { shipmentId },
     { $set: { warehouseId, updatedAt: new Date().toISOString() } }
   );
+
+  if (result.matchedCount === 0) {
+    const error = new Error("Shipment not found");
+    error.code = "SHIPMENT_NOT_FOUND";
+    throw error;
+  }
+
   await addTimelineEvent(shipmentId, "WAREHOUSE_ASSIGNED", actorId, { warehouseId });
 
   return shipments.findOne({ shipmentId });
 }
 
-export function canUserAccessShipment(shipment, uid, role) {
-  if (role === Role.ADMIN) return true;
+export async function assignRetailer(shipmentId, retailerId, actorId, actorRole = null) {
+  const shipments = getCollection("shipments");
 
-  if (role === Role.FARMER) {
-    return shipment.farmerId === uid || shipment.createdBy === uid;
+  const access = buildShipmentAccessFilter({ uid: actorId, role: actorRole });
+  const shipment = await shipments.findOne({ shipmentId, ...access });
+  if (!shipment) {
+    const error = new Error("Shipment not found");
+    error.code = "SHIPMENT_NOT_FOUND";
+    throw error;
   }
 
-  if (role === Role.TRANSPORTER) {
-    return shipment.transporterId === uid || shipment.assignedTransporter === uid;
+  await validateAssignedUser(retailerId, Role.RETAILER);
+
+  const result = await shipments.updateOne(
+    { shipmentId },
+    { $set: { retailerId, updatedAt: new Date().toISOString() } }
+  );
+
+  if (result.matchedCount === 0) {
+    const error = new Error("Shipment not found");
+    error.code = "SHIPMENT_NOT_FOUND";
+    throw error;
   }
 
-  if (role === Role.WAREHOUSE) {
-    return shipment.warehouseId === uid || shipment.assignedWarehouse === uid;
-  }
+  await addTimelineEvent(shipmentId, "RETAILER_ASSIGNED", actorId, { retailerId });
 
-  return false;
+  return shipments.findOne({ shipmentId });
 }
+
+export { canAccessShipment, buildShipmentAccessFilter };
 
 export async function listShipments(uid, role) {
   const shipments = getCollection("shipments");
 
-  if (role === Role.ADMIN) {
-    return shipments.find({}).toArray();
-  }
+  const filter = buildShipmentAccessFilter({ uid, role });
 
-  if (role === Role.FARMER) {
-    const farmerDocs = await shipments.find({ farmerId: uid }).toArray();
-    const creatorDocs = await shipments.find({ createdBy: uid }).toArray();
-    const seen = new Set();
-    const result = [];
-    for (const doc of [...farmerDocs, ...creatorDocs]) {
-      if (!seen.has(doc.shipmentId)) {
-        seen.add(doc.shipmentId);
-        result.push(doc);
-      }
-    }
-    return result;
-  }
-
-  if (role === Role.TRANSPORTER) {
-    const transporterDocs = await shipments.find({ transporterId: uid }).toArray();
-    const assignedDocs = await shipments.find({ assignedTransporter: uid }).toArray();
-    const seen = new Set();
-    const result = [];
-    for (const doc of [...transporterDocs, ...assignedDocs]) {
-      if (!seen.has(doc.shipmentId)) {
-        seen.add(doc.shipmentId);
-        result.push(doc);
-      }
-    }
-    return result;
-  }
-
-  if (role === Role.WAREHOUSE) {
-    const warehouseDocs = await shipments.find({ warehouseId: uid }).toArray();
-    const assignedDocs = await shipments.find({ assignedWarehouse: uid }).toArray();
-    const seen = new Set();
-    const result = [];
-    for (const doc of [...warehouseDocs, ...assignedDocs]) {
-      if (!seen.has(doc.shipmentId)) {
-        seen.add(doc.shipmentId);
-        result.push(doc);
-      }
-    }
-    return result;
-  }
-
-  return [];
+  return shipments.find(filter).sort({ createdAt: -1 }).toArray();
 }
 
 export async function getShipmentForUser(shipmentId, uid, role) {
-  const shipment = await getCollection("shipments").findOne({ shipmentId });
+  const access = buildShipmentAccessFilter({ uid, role });
+
+  const shipment = await getCollection("shipments").findOne({
+    shipmentId,
+    ...access,
+  });
 
   if (!shipment) return null;
-
-  if (!canUserAccessShipment(shipment, uid, role)) {
-    const error = new Error("Not authorized to access this shipment");
-    error.code = "SHIPMENT_ACCESS_DENIED";
-    throw error;
-  }
 
   return shipment;
 }
 
-export async function getShipment(shipmentId) {
-  return getCollection("shipments").findOne({ shipmentId });
+export async function getShipment(shipmentId, uid = null, role = null) {
+  const access = buildShipmentAccessFilter({ uid, role });
+  return getCollection("shipments").findOne({
+    shipmentId,
+    ...access,
+  });
 }

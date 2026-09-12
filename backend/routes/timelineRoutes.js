@@ -5,11 +5,12 @@ import { getShipmentForUser } from "../services/shipmentService.js";
 import { Role } from "../core/roles.js";
 
 const router = express.Router();
+const timelineRoles = [Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.RETAILER, Role.ADMIN];
 
 router.post(
   "/:shipmentId/timeline",
   getCurrentUser,
-  requireRole(Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN),
+  requireRole(...timelineRoles),
   async (req, res) => {
     try {
       const shipment = await getShipmentForUser(
@@ -47,7 +48,7 @@ router.post(
 router.get(
   "/:shipmentId/timeline",
   getCurrentUser,
-  requireRole(Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN),
+  requireRole(...timelineRoles),
   async (req, res) => {
     try {
       const shipment = await getShipmentForUser(

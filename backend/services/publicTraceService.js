@@ -40,7 +40,8 @@ export async function getPublicTraceByTrackingId(trackingId) {
       timestamp: entry.timestamp,
     }));
 
-  const deviceData = shipment.assignedDevice
+  const hasDevice = !!shipment.assignedDevice;
+  const deviceData = hasDevice
     ? await getCollection("devices").findOne({ deviceId: shipment.assignedDevice })
     : null;
 
@@ -54,25 +55,30 @@ export async function getPublicTraceByTrackingId(trackingId) {
       ? BLOCKCHAIN_STATUS.MOCK_CONFIRMED
     : "PENDING";
 
-  return {
-    shipmentId: shipment.shipmentId,
+  const result = {
     trackingId: shipment.trackingId,
     productName: shipment.productName || null,
     origin: shipment.origin || null,
     destination: shipment.destination || null,
     status: shipment.status || null,
     createdAt: shipment.createdAt || null,
-    environment: {
-      condition: environmentSummary?.condition || "GOOD",
-      averageTemperature: environmentSummary?.temperature?.average ?? null,
-      averageHumidity: environmentSummary?.humidity?.average ?? null,
-      maxGasLevel: environmentSummary?.gasLevel?.max ?? null,
-      totalViolations: environmentSummary?.violations?.total ?? 0,
-    },
-    device: {
-      status: deviceData?.status || "OFFLINE",
-      lastSeenAt: deviceData?.lastSeenAt || null,
-    },
+    hasMonitoringDevice: hasDevice,
+    environment: hasDevice
+      ? {
+          condition: environmentSummary?.condition || "GOOD",
+          averageTemperature: environmentSummary?.temperature?.average ?? null,
+          averageHumidity: environmentSummary?.humidity?.average ?? null,
+          maxGasLevel: environmentSummary?.gasLevel?.max ?? null,
+          totalViolations: environmentSummary?.violations?.total ?? 0,
+        }
+      : {
+          condition: "NOT_MONITORED",
+          averageTemperature: null,
+          averageHumidity: null,
+          maxGasLevel: null,
+          totalViolations: 0,
+          message: "No monitoring device was attached to this shipment.",
+        },
     timeline: publicTimeline,
     integrity: {
       verified: integrity.verified,
@@ -81,14 +87,23 @@ export async function getPublicTraceByTrackingId(trackingId) {
       blockchainStatus,
       blockchainMode: process.env.BLOCKCHAIN_MODE || "mock",
     },
-    latestTelemetry: latestTelemetry
-      ? {
-          temperature: latestTelemetry.temperature ?? null,
-          humidity: latestTelemetry.humidity ?? null,
-          gasLevel: latestTelemetry.gasLevel ?? null,
-          battery: latestTelemetry.battery ?? null,
-          timestamp: latestTelemetry.timestamp ?? null,
-        }
-      : null,
   };
+
+  if (hasDevice && latestTelemetry) {
+    result.latestTelemetry = {
+      temperature: latestTelemetry.temperature ?? null,
+      humidity: latestTelemetry.humidity ?? null,
+      gasLevel: latestTelemetry.gasLevel ?? null,
+      battery: latestTelemetry.battery ?? null,
+      timestamp: latestTelemetry.timestamp ?? null,
+    };
+  } else if (hasDevice && !latestTelemetry) {
+    result.deviceMessage = "Monitoring device assigned. No telemetry readings are available yet.";
+  }
+
+  if (!integrity.verified && checkpoints.length === 0) {
+    result.integrity.message = "Integrity checkpoint not available yet";
+  }
+
+  return result;
 }

@@ -114,8 +114,8 @@ export const AuthProvider = ({ children }) => {
 
   /**
    * Register a new user: create the Firebase account, then create the
-   * Firestore business profile via the backend (POST /auth/register).
-   * `role` must be FARMER | TRANSPORTER | WAREHOUSE.
+   * Mongo business profile via the backend (POST /auth/register).
+   * `role` must be FARMER | TRANSPORTER | WAREHOUSE | RETAILER.
    */
   const register = async (name, email, password, role) => {
     const firebaseUser = await registerUser(name, email, password);

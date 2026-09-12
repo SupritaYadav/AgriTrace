@@ -1,10 +1,11 @@
 import express from "express";
 import { getCurrentUser, requireRole } from "../core/deps.js";
 import { Role } from "../core/roles.js";
-import { registerDevice, listDevices, assignDevice, getDevice, getDeviceHealth } from "../services/deviceService.js";
+import { registerDevice, listDevicesForUser, assignDevice, getDeviceForUser, getDeviceHealthForUser } from "../services/deviceService.js";
 import { success, error } from "../utils/apiResponse.js";
 
 const router = express.Router();
+const deviceReadRoles = [Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.RETAILER, Role.ADMIN];
 
 router.post(
   "/",
@@ -20,18 +21,18 @@ router.post(
   }
 });
 
-router.get("/", getCurrentUser, requireRole(Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN), async (req, res) => {
-  const devices = await listDevices();
+router.get("/", getCurrentUser, requireRole(...deviceReadRoles), async (req, res) => {
+  const devices = await listDevicesForUser(req.user);
   return success(res, devices, "Devices retrieved successfully");
 });
 
 router.get(
   "/:deviceId",
   getCurrentUser,
-  requireRole(Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN),
+  requireRole(...deviceReadRoles),
   async (req, res) => {
     try {
-      const device = await getDevice(req.params.deviceId);
+      const device = await getDeviceForUser(req.params.deviceId, req.user);
       if (!device) {
         return error(res, 404, "Device not found");
       }
@@ -47,10 +48,10 @@ router.get(
 router.get(
   "/:deviceId/health",
   getCurrentUser,
-  requireRole(Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN),
+  requireRole(...deviceReadRoles),
   async (req, res) => {
     try {
-      const health = await getDeviceHealth(req.params.deviceId);
+      const health = await getDeviceHealthForUser(req.params.deviceId, req.user);
       if (!health) {
         return error(res, 404, "Device not found");
       }
@@ -76,7 +77,7 @@ router.post(
     }
 
     try {
-      const result = await assignDevice(deviceId, shipmentId, req.user.uid);
+      const result = await assignDevice(deviceId, shipmentId, req.user.uid, req.user.role);
       return success(res, result, "Device assigned successfully");
     } catch (errorObj) {
       const statusByCode = {

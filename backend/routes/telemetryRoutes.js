@@ -8,6 +8,8 @@ import {
   getLatestTelemetryByShipment,
   getTelemetryHistoryByShipment,
 } from "../services/telemetryService.js";
+import { getShipmentForUser } from "../services/shipmentService.js";
+import { getDeviceForUser } from "../services/deviceService.js";
 
 const router = express.Router();
 
@@ -15,6 +17,7 @@ const telemetryRoles = [
   Role.FARMER,
   Role.TRANSPORTER,
   Role.WAREHOUSE,
+  Role.RETAILER,
   Role.ADMIN,
 ];
 
@@ -82,6 +85,9 @@ router.get(
     if (validationError) return res.status(400).json({ detail: validationError });
 
     try {
+      const device = await getDeviceForUser(req.params.deviceId.trim(), req.user);
+      if (!device) return res.status(404).json({ detail: "Device not found or access denied" });
+
       const telemetry = await getLatestTelemetryByDevice(req.params.deviceId.trim());
       if (!telemetry) return res.status(404).json({ detail: "Telemetry not found" });
       return res.json(telemetry);
@@ -103,6 +109,9 @@ router.get(
     if (parsed.error) return res.status(400).json({ detail: parsed.error });
 
     try {
+      const device = await getDeviceForUser(req.params.deviceId.trim(), req.user);
+      if (!device) return res.status(404).json({ detail: "Device not found or access denied" });
+
       const telemetry = await getTelemetryHistoryByDevice(
         req.params.deviceId.trim(),
         parsed.filters
@@ -123,6 +132,9 @@ router.get(
     if (validationError) return res.status(400).json({ detail: validationError });
 
     try {
+      const shipment = await getShipmentForUser(req.params.shipmentId.trim(), req.user.uid, req.user.role);
+      if (!shipment) return res.status(404).json({ detail: "Shipment not found or access denied" });
+
       const telemetry = await getLatestTelemetryByShipment(req.params.shipmentId.trim());
       if (!telemetry) return res.status(404).json({ detail: "Telemetry not found" });
       return res.json(telemetry);
@@ -144,6 +156,9 @@ router.get(
     if (parsed.error) return res.status(400).json({ detail: parsed.error });
 
     try {
+      const shipment = await getShipmentForUser(req.params.shipmentId.trim(), req.user.uid, req.user.role);
+      if (!shipment) return res.status(404).json({ detail: "Shipment not found or access denied" });
+
       const telemetry = await getTelemetryHistoryByShipment(
         req.params.shipmentId.trim(),
         parsed.filters

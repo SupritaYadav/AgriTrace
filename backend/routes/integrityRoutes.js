@@ -7,7 +7,7 @@ import { getBlockchainHealth } from "../services/blockchainService.js";
 import { success, error } from "../utils/apiResponse.js";
 
 const router = express.Router();
-const authorized = [Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN];
+const authorized = [Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.RETAILER, Role.ADMIN];
 
 router.post("/shipments/:shipmentId/integrity/checkpoint", getCurrentUser, requireRole(...authorized), async (req, res) => {
   try {

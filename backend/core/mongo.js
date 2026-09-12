@@ -49,6 +49,7 @@ export async function connectMongo() {
   await collections.shipments.createIndex({ createdBy: 1 });
   await collections.shipments.createIndex({ transporterId: 1 });
   await collections.shipments.createIndex({ warehouseId: 1 });
+  await collections.shipments.createIndex({ retailerId: 1 });
   await collections.shipments.createIndex({ assignedDevice: 1 });
   await collections.shipments.createIndex({ status: 1 });
   await collections.shipments.createIndex({ createdAt: -1 });

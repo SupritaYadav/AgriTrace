@@ -6,11 +6,12 @@ import { getShipmentEnvironmentSummary } from "../services/environmentSummarySer
 import { success, error } from "../utils/apiResponse.js";
 
 const router = express.Router();
+const envSummaryRoles = [Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.RETAILER, Role.ADMIN];
 
 router.get(
   "/:shipmentId/environment-summary",
   getCurrentUser,
-  requireRole(Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN),
+  requireRole(...envSummaryRoles),
   async (req, res) => {
     try {
       const shipment = await getShipmentForUser(req.params.shipmentId, req.user.uid, req.user.role);

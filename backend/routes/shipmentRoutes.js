@@ -9,10 +9,13 @@ import {
   updateShipmentStatus,
   assignTransporter,
   assignWarehouse,
+  assignRetailer,
 } from "../services/shipmentService.js";
 import { success, error } from "../utils/apiResponse.js";
 
 const router = express.Router();
+const shipmentReadRoles = [Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.RETAILER, Role.ADMIN];
+const shipmentWriteRoles = [Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN];
 
 router.post(
   "/",
@@ -36,7 +39,7 @@ router.post(
 router.patch(
   "/:shipmentId/status",
   getCurrentUser,
-  requireRole(Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN),
+  requireRole(...shipmentWriteRoles),
   async (req, res) => {
     try {
       const { status } = req.body;
@@ -67,7 +70,7 @@ router.patch(
         return error(res, 400, "transporterId is required");
       }
 
-      const shipment = await assignTransporter(req.params.shipmentId, transporterId, req.user.uid);
+      const shipment = await assignTransporter(req.params.shipmentId, transporterId, req.user.uid, req.user.role);
       if (!shipment) {
         return error(res, 404, "Shipment not found");
       }
@@ -90,12 +93,35 @@ router.patch(
         return error(res, 400, "warehouseId is required");
       }
 
-      const shipment = await assignWarehouse(req.params.shipmentId, warehouseId, req.user.uid);
+      const shipment = await assignWarehouse(req.params.shipmentId, warehouseId, req.user.uid, req.user.role);
       if (!shipment) {
         return error(res, 404, "Shipment not found");
       }
 
       return success(res, shipment, "Warehouse assigned successfully");
+    } catch (err) {
+      return error(res, 400, err.message);
+    }
+  }
+);
+
+router.patch(
+  "/:shipmentId/assign-retailer",
+  getCurrentUser,
+  requireRole(Role.FARMER, Role.ADMIN),
+  async (req, res) => {
+    try {
+      const { retailerId } = req.body;
+      if (!retailerId) {
+        return error(res, 400, "retailerId is required");
+      }
+
+      const shipment = await assignRetailer(req.params.shipmentId, retailerId, req.user.uid, req.user.role);
+      if (!shipment) {
+        return error(res, 404, "Shipment not found");
+      }
+
+      return success(res, shipment, "Retailer assigned successfully");
     } catch (err) {
       return error(res, 400, err.message);
     }
@@ -129,7 +155,7 @@ router.patch(
   }
 );
 
-router.get("/", getCurrentUser, requireRole(Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN), async (req, res) => {
+router.get("/", getCurrentUser, requireRole(...shipmentReadRoles), async (req, res) => {
   const shipments = await listShipments(req.user.uid, req.user.role);
   return success(res, shipments, "Shipments retrieved successfully");
 });
@@ -137,7 +163,7 @@ router.get("/", getCurrentUser, requireRole(Role.FARMER, Role.TRANSPORTER, Role.
 router.get(
   "/:shipmentId",
   getCurrentUser,
-  requireRole(Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN),
+  requireRole(...shipmentReadRoles),
   async (req, res) => {
     try {
       const shipment = await getShipmentForUser(req.params.shipmentId, req.user.uid, req.user.role);

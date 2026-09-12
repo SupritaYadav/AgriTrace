@@ -5,11 +5,12 @@ import { generateShipmentQr, generateShipmentQrPng } from "../services/qrService
 import { success, error } from "../utils/apiResponse.js";
 
 const router = express.Router();
+const qrRoles = [Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.RETAILER, Role.ADMIN];
 
 router.get(
   "/:shipmentId/qr",
   getCurrentUser,
-  requireRole(Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN),
+  requireRole(...qrRoles),
   async (req, res) => {
     try {
       const { format } = req.query;

@@ -12,6 +12,8 @@ import {
 import { success, error as errorRes } from "../utils/apiResponse.js";
 
 const router = express.Router();
+const marketplaceReadRoles = [Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.RETAILER, Role.ADMIN];
+const buyerRoles = [Role.WAREHOUSE, Role.RETAILER, Role.ADMIN];
 
 router.post("/", getCurrentUser, requireRole(Role.FARMER, Role.ADMIN), async (req, res) => {
   try {
@@ -26,7 +28,7 @@ router.post("/", getCurrentUser, requireRole(Role.FARMER, Role.ADMIN), async (re
   }
 });
 
-router.get("/", getCurrentUser, requireRole(Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN), async (req, res) => {
+router.get("/", getCurrentUser, requireRole(...marketplaceReadRoles), async (req, res) => {
   try {
     const { product, status, location, sellerId } = req.query;
     const listings = await listListings({ product, status, location, sellerId });
@@ -47,7 +49,7 @@ router.get("/my-listings", getCurrentUser, requireRole(Role.FARMER, Role.ADMIN),
   }
 });
 
-router.get("/my-purchases", getCurrentUser, requireRole(Role.WAREHOUSE, Role.ADMIN), async (req, res) => {
+router.get("/my-purchases", getCurrentUser, requireRole(...buyerRoles), async (req, res) => {
   try {
     const purchases = await getPurchasesByBuyer(req.user.uid);
     return success(res, purchases, "Your purchases retrieved successfully");
@@ -57,7 +59,7 @@ router.get("/my-purchases", getCurrentUser, requireRole(Role.WAREHOUSE, Role.ADM
   }
 });
 
-router.get("/:listingId", getCurrentUser, requireRole(Role.FARMER, Role.TRANSPORTER, Role.WAREHOUSE, Role.ADMIN), async (req, res) => {
+router.get("/:listingId", getCurrentUser, requireRole(...marketplaceReadRoles), async (req, res) => {
   try {
     const listing = await getListingById(req.params.listingId);
     if (!listing) {
@@ -70,7 +72,7 @@ router.get("/:listingId", getCurrentUser, requireRole(Role.FARMER, Role.TRANSPOR
   }
 });
 
-router.post("/:listingId/buy", getCurrentUser, requireRole(Role.WAREHOUSE, Role.ADMIN), async (req, res) => {
+router.post("/:listingId/buy", getCurrentUser, requireRole(...buyerRoles), async (req, res) => {
   try {
     const listing = await buyListing(req.params.listingId, req.user.uid);
     return success(res, listing, "Listing purchased successfully");

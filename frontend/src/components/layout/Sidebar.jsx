@@ -5,10 +5,32 @@ import {
   useLocation,
 } from "react-router-dom";
 
+import { useAuth } from "../../context/AuthContext";
+
+const Role = Object.freeze({
+  FARMER: "FARMER",
+  TRANSPORTER: "TRANSPORTER",
+  WAREHOUSE: "WAREHOUSE",
+  RETAILER: "RETAILER",
+  ADMIN: "ADMIN",
+});
+
+function hasRole(profile, roles) {
+  if (!profile?.role) return false;
+  return roles.includes(profile.role);
+}
+
 const Sidebar = ({
   onCollapse,
 }) => {
   const location = useLocation();
+  const { profile } = useAuth();
+  const role = profile?.role ?? null;
+  const isAdmin = role === Role.ADMIN;
+  const isFarmer = role === Role.FARMER;
+  const isTransporter = role === Role.TRANSPORTER;
+  const isWarehouse = role === Role.WAREHOUSE;
+  const isRetailer = role === Role.RETAILER;
 
   const shipmentRouteOpen = location.pathname.startsWith("/shipments");
   const deviceRouteOpen = location.pathname.startsWith("/devices");
@@ -20,6 +42,13 @@ const Sidebar = ({
     if (shipmentRouteOpen) setShipmentOpen(true);
     if (deviceRouteOpen) setDeviceOpen(true);
   }, [shipmentRouteOpen, deviceRouteOpen]);
+
+  const showCreateShipment = isFarmer || isAdmin;
+  const showAssignDevice = isFarmer || isAdmin;
+  const showSmartRoute = isTransporter || isAdmin;
+  const showMarketplace = isFarmer || isWarehouse || isRetailer || isAdmin;
+  const showAnalytics = isAdmin || true;
+  const showReports = isAdmin || true;
 
   return (
     <aside id="sidebar" className="sidebar">
@@ -73,14 +102,16 @@ const Sidebar = ({
           </button>
 
           <div className="nav-children">
-            <NavLink
-              to="/shipments/create"
-              className={({ isActive }) =>
-                `nav-item nav-child ${isActive ? "active-page" : ""}`
-              }
-            >
-              <span>Create Shipment</span>
-            </NavLink>
+            {showCreateShipment && (
+              <NavLink
+                to="/shipments/create"
+                className={({ isActive }) =>
+                  `nav-item nav-child ${isActive ? "active-page" : ""}`
+                }
+              >
+                <span>Create Shipment</span>
+              </NavLink>
+            )}
 
             <NavLink
               to="/shipments/active"
@@ -128,14 +159,16 @@ const Sidebar = ({
               <span>Device List</span>
             </NavLink>
 
-            <NavLink
-              to="/devices/assign"
-              className={({ isActive }) =>
-                `nav-item nav-child ${isActive ? "active-page" : ""}`
-              }
-            >
-              <span>Assign Device</span>
-            </NavLink>
+            {showAssignDevice && (
+              <NavLink
+                to="/devices/assign"
+                className={({ isActive }) =>
+                  `nav-item nav-child ${isActive ? "active-page" : ""}`
+                }
+              >
+                <span>Assign Device</span>
+              </NavLink>
+            )}
           </div>
         </div>
 
@@ -170,45 +203,53 @@ const Sidebar = ({
             <span>Alerts</span>
           </NavLink>
 
-          <NavLink
-            to="/marketplace"
-            className={({ isActive }) =>
-              `nav-item ${isActive ? "active-page" : ""}`
-            }
-          >
-            <i className="fa-solid fa-store"></i>
-            <span>Marketplace</span>
-          </NavLink>
+          {showMarketplace && (
+            <NavLink
+              to="/marketplace"
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active-page" : ""}`
+              }
+            >
+              <i className="fa-solid fa-store"></i>
+              <span>Marketplace</span>
+            </NavLink>
+          )}
 
-          <NavLink
-            to="/routes/smart"
-            className={({ isActive }) =>
-              `nav-item ${isActive ? "active-page" : ""}`
-            }
-          >
-            <i className="fa-solid fa-globe-with-compass"></i>
-            <span>Smart Route</span>
-          </NavLink>
+          {showSmartRoute && (
+            <NavLink
+              to="/routes/smart"
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active-page" : ""}`
+              }
+            >
+              <i className="fa-solid fa-globe-with-compass"></i>
+              <span>Smart Route</span>
+            </NavLink>
+          )}
 
-          <NavLink
-            to="/analytics"
-            className={({ isActive }) =>
-              `nav-item ${isActive ? "active-page" : ""}`
-            }
-          >
-            <i className="fa-solid fa-chart-line"></i>
-            <span>Analytics</span>
-          </NavLink>
+          {showAnalytics && (
+            <NavLink
+              to="/analytics"
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active-page" : ""}`
+              }
+            >
+              <i className="fa-solid fa-chart-line"></i>
+              <span>Analytics</span>
+            </NavLink>
+          )}
 
-          <NavLink
-            to="/reports"
-            className={({ isActive }) =>
-              `nav-item ${isActive ? "active-page" : ""}`
-            }
-          >
-            <i className="fa-solid fa-file-lines"></i>
-            <span>Reports</span>
-          </NavLink>
+          {showReports && (
+            <NavLink
+              to="/reports"
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active-page" : ""}`
+              }
+            >
+              <i className="fa-solid fa-file-lines"></i>
+              <span>Reports</span>
+            </NavLink>
+          )}
 
           <NavLink
             to="/profile"

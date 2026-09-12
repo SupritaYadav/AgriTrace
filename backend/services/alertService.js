@@ -2,6 +2,7 @@ import { getCollection } from "../core/mongo.js";
 import { broadcastToAll } from "../core/websocket.js";
 import { TimelineEventType } from "../core/timelineEvents.js";
 import { addTimelineEvent } from "./timelineService.js";
+import { getAccessibleShipmentIds, getAccessibleDeviceIds } from "../core/accessControl.js";
 
 export async function createSystemAlert({
   deviceId,
@@ -265,7 +266,6 @@ async function transitionAlert(reading, rule, thresholds) {
   return { action: "resolved", alert: resolvedAlert };
 }
 
-// Existing evaluateAlerts function retained
 export async function evaluateAlerts(reading, shipment = null) {
   if (!reading?.deviceId) return;
 
@@ -345,11 +345,28 @@ export async function evaluateAlerts(reading, shipment = null) {
   }
 }
 
-/**
- * Retrieve alerts with optional filters and pagination.
- * @param {object} filters { status, severity, shipmentId, deviceId, page, limit }
- */
-export async function listAlerts(filters = {}) {
+async function buildAlertAccessFilter(user) {
+  if (!user || !user.role) return { _id: null };
+  if (user.role === "ADMIN") return {};
+
+  const [shipmentIds, deviceIds] = await Promise.all([
+    getAccessibleShipmentIds(user),
+    getAccessibleDeviceIds(user),
+  ]);
+
+  const orClauses = [];
+  if (shipmentIds.length > 0) {
+    orClauses.push({ shipmentId: { $in: shipmentIds } });
+  }
+  if (deviceIds.length > 0) {
+    orClauses.push({ deviceId: { $in: deviceIds } });
+  }
+
+  if (orClauses.length === 0) return { _id: null };
+  return { $or: orClauses };
+}
+
+export async function listAlertsForUser(user, filters = {}) {
   const {
     status,
     severity,
@@ -368,7 +385,8 @@ export async function listAlerts(filters = {}) {
   const safeLimit =
     Number.isInteger(parsedLimit) && parsedLimit > 0 ? parsedLimit : 20;
 
-  let query = {};
+  const accessFilter = await buildAlertAccessFilter(user);
+  let query = { ...accessFilter };
 
   if (status) {
     query.status = status;
@@ -410,14 +428,27 @@ export async function listAlerts(filters = {}) {
   };
 }
 
-/** Retrieve a single alert by its alertId */
+export async function listAlerts(filters = {}) {
+  return listAlertsForUser({ role: "ADMIN" }, filters);
+}
+
+export async function getAlertByIdForUser(alertId, user) {
+  const alert = await getCollection("alerts").findOne({ alertId });
+  if (!alert) return null;
+
+  const accessFilter = await buildAlertAccessFilter(user);
+  const accessible = await getCollection("alerts").findOne({ alertId, ...accessFilter });
+  if (!accessible) return null;
+
+  return { id: alert._id?.toString(), ...alert };
+}
+
 export async function getAlertById(alertId) {
   const doc = await getCollection("alerts").findOne({ alertId });
   if (!doc) return null;
   return { id: doc._id?.toString(), ...doc };
 }
 
-/** Acknowledge an alert */
 export async function acknowledgeAlert(alertId, userId) {
   const now = new Date().toISOString();
   const result = await getCollection("alerts").findOneAndUpdate(
@@ -429,7 +460,6 @@ export async function acknowledgeAlert(alertId, userId) {
   return { id: result._id?.toString(), ...result };
 }
 
-/** Resolve an alert */
 export async function resolveAlert(alertId, userId) {
   const now = new Date().toISOString();
   const result = await getCollection("alerts").findOneAndUpdate(

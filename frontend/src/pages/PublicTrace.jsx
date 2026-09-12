@@ -509,7 +509,7 @@ const PublicTrace = () => {
 
               <p>
                 Trace ID:{" "}
-                <strong>{trace.trackingId || trace.shipmentId || "N/A"}</strong>
+                <strong>{trace.trackingId || "N/A"}</strong>
               </p>
             </div>
 
@@ -525,7 +525,7 @@ const PublicTrace = () => {
           <section className="consumer-info-grid">
             <div>
               <span>Batch</span>
-              <strong>{trace.batchId || trace.trackingId || "N/A"}</strong>
+              <strong>{trace.trackingId || "N/A"}</strong>
             </div>
 
             <div>
@@ -567,13 +567,7 @@ const PublicTrace = () => {
 
                     <div className="timeline-content">
                       <h3>{item.type || "Event"}</h3>
-                      <strong>{item.location || "Unknown location"}</strong>
                       <span>{item.timestamp ? formatDate(item.timestamp) : "—"}</span>
-                      {item.metadata && (
-                        <p>
-                          {JSON.stringify(item.metadata).replace(/[{}"\]]/g, "").slice(0, 200)}
-                        </p>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -594,54 +588,99 @@ const PublicTrace = () => {
               </p>
             </div>
 
-            {trace.latestTelemetry ? (
-              <div className="consumer-condition-grid">
-                <div>
-                  <span>Temperature</span>
-                  <strong>{trace.latestTelemetry.temperature !== undefined ? `${trace.latestTelemetry.temperature}°C` : "N/A"}</strong>
-                  <small>
-                    {trace.latestTelemetry.temperature !== undefined && trace.latestTelemetry.temperature <= 8
-                      ? "Within safe range"
-                      : "Check conditions"}
-                  </small>
-                </div>
-
-                <div>
-                  <span>Humidity</span>
-                  <strong>{trace.latestTelemetry.humidity !== undefined ? `${trace.latestTelemetry.humidity}%` : "N/A"}</strong>
-                  <small>Optimal</small>
-                </div>
-
-                <div>
-                  <span>Last Updated</span>
-                  <strong>{trace.latestTelemetry.recordedAt ? formatDate(trace.latestTelemetry.recordedAt) : "N/A"}</strong>
-                </div>
+            {!trace.hasMonitoringDevice ? (
+              <div className="data-unavailable">
+                No monitoring device was attached to this shipment.
               </div>
+            ) : trace.latestTelemetry ? (
+              <>
+                <div className="consumer-condition-grid">
+                  <div>
+                    <span>Average Temperature</span>
+                    <strong>
+                      {trace.environment?.averageTemperature !== undefined && trace.environment?.averageTemperature !== null
+                        ? `${trace.environment.averageTemperature}°C`
+                        : "N/A"}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>Average Humidity</span>
+                    <strong>
+                      {trace.environment?.averageHumidity !== undefined && trace.environment?.averageHumidity !== null
+                        ? `${trace.environment.averageHumidity}%`
+                        : "N/A"}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>Condition</span>
+                    <strong className={
+                      trace.environment?.condition === "GOOD" ? "positive-text" : "alert-text"
+                    }>
+                      {trace.environment?.condition || "Unknown"}
+                    </strong>
+                  </div>
+                </div>
+
+                {trace.latestTelemetry && (
+                  <div style={{ marginTop: 16 }} className="consumer-condition-grid">
+                    <div>
+                      <span>Latest Temperature</span>
+                      <strong>
+                        {trace.latestTelemetry.temperature !== undefined && trace.latestTelemetry.temperature !== null
+                          ? `${trace.latestTelemetry.temperature}°C`
+                          : "N/A"}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>Latest Humidity</span>
+                      <strong>
+                        {trace.latestTelemetry.humidity !== undefined && trace.latestTelemetry.humidity !== null
+                          ? `${trace.latestTelemetry.humidity}%`
+                          : "N/A"}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>Last Reading</span>
+                      <strong>
+                        {trace.latestTelemetry.timestamp ? formatDate(trace.latestTelemetry.timestamp) : "N/A"}
+                      </strong>
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="data-unavailable">
-                No telemetry data available for this shipment.
+                {trace.deviceMessage || "Monitoring device assigned. No telemetry readings are available yet."}
               </div>
             )}
           </section>
 
           <section className="blockchain-proof">
             <div>
-              <span>Blockchain Verified</span>
+              <span>Integrity Verified</span>
 
               <h3>
                 Tamper-resistant supply chain record
               </h3>
 
               <p>
-                This traceability record has been
-                cryptographically verified.
+                {trace.integrity?.verified
+                  ? "This traceability record has been cryptographically verified."
+                  : trace.integrity?.message || (
+                      trace.integrity?.checkpointCount
+                        ? "Integrity check encountered an issue."
+                        : "Integrity checkpoint not available yet"
+                    )}
               </p>
             </div>
 
             <code>
-              {trace.integrity?.checkpoints && trace.integrity.checkpoints.length > 0
-                ? trace.integrity.checkpoints[trace.integrity.checkpoints.length - 1].recordHash
-                : (trace.blockchainHash || "No integrity data available")}
+              {trace.integrity?.status || "PENDING"}
+              {trace.integrity?.blockchainMode === "mock" ? " (MOCK)" : ""}
             </code>
           </section>
         </main>
