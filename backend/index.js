@@ -16,6 +16,8 @@ import environmentSummaryRoutes from "./routes/environmentSummaryRoutes.js";
 import publicTraceRoutes from "./routes/publicTraceRoutes.js";
 import qrRoutes from "./routes/qrRoutes.js";
 import integrityRoutes from "./routes/integrityRoutes.js";
+import routeRoutes from "./routes/routeRoutes.js";
+import marketplaceRoutes from "./routes/marketplaceRoutes.js";
 import { checkOfflineDevices } from "./services/deviceMonitorService.js";
 import { startCheckpointScheduler } from "./services/checkpointService.js";
 
@@ -38,6 +40,8 @@ app.use("/api/v1/devices", deviceRoutes);
 app.use("/api/v1/telemetry", telemetryRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/v1/public", publicTraceRoutes);
+app.use("/api/v1/routes", routeRoutes);
+app.use("/api/v1/marketplace", marketplaceRoutes);
 
 app.get("/api/v1/health", async (req, res) => {
   try {

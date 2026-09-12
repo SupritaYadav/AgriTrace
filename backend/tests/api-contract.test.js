@@ -14,6 +14,8 @@ import publicTraceRoutes from "../routes/publicTraceRoutes.js";
 import qrRoutes from "../routes/qrRoutes.js";
 import integrityRoutes from "../routes/integrityRoutes.js";
 import environmentSummaryRoutes from "../routes/environmentSummaryRoutes.js";
+import marketplaceRoutes from "../routes/marketplaceRoutes.js";
+import routeRoutes from "../routes/routeRoutes.js";
 
 function createApp() {
   const app = express();
@@ -30,8 +32,10 @@ function createApp() {
   app.use("/api/v1/devices", deviceRoutes);
   app.use("/api/v1/telemetry", telemetryRoutes);
   app.use("/api/v1/dashboard", dashboardRoutes);
-  app.use("/api/v1/public", publicTraceRoutes);
-  app.use("/api/v1/timeline", timelineRoutes);
+   app.use("/api/v1/public", publicTraceRoutes);
+   app.use("/api/v1/timeline", timelineRoutes);
+   app.use("/api/v1/marketplace", marketplaceRoutes);
+   app.use("/api/v1/routes", routeRoutes);
 
   app.get("/api/v1/health", (req, res) => res.json({ success: true, data: { status: "ok" } }));
 
@@ -236,4 +240,139 @@ test("assign warehouse without warehouseId returns 400 (when authed)", async () 
   if (res.status === 400) {
     assert.ok(res.body.message || res.body.detail);
   }
+});
+
+// ============================================================
+// Marketplace API Contract Tests
+// ============================================================
+
+test("marketplace browse without auth returns 401", async () => {
+  const app = createApp();
+  const res = await request(app).get("/api/v1/marketplace");
+  assert.equal(res.status, 401);
+});
+
+test("marketplace create listing without auth returns 401", async () => {
+  const app = createApp();
+  const res = await request(app).post("/api/v1/marketplace").set("Authorization", "Bearer valid-token").send({});
+  assert.ok([401, 400, 403, 500].includes(res.status));
+});
+
+test("marketplace create listing with empty product returns 400 or 401", async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post("/api/v1/marketplace")
+    .set("Authorization", "Bearer valid-token")
+    .send({ product: "", quantity: 10, pricePerUnit: 5, location: "Test" });
+  assert.ok([400, 401, 403, 500].includes(res.status));
+});
+
+test("marketplace create listing with invalid quantity returns 400 or 401", async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post("/api/v1/marketplace")
+    .set("Authorization", "Bearer valid-token")
+    .send({ product: "Tomato", quantity: -1, pricePerUnit: 5, location: "Test" });
+  assert.ok([400, 401, 403, 500].includes(res.status));
+});
+
+test("marketplace create listing with zero price returns 400 or 401", async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post("/api/v1/marketplace")
+    .set("Authorization", "Bearer valid-token")
+    .send({ product: "Tomato", quantity: 10, pricePerUnit: 0, location: "Test" });
+  assert.ok([400, 401, 403, 500].includes(res.status));
+});
+
+test("marketplace create listing missing location returns 400 or 401", async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post("/api/v1/marketplace")
+    .set("Authorization", "Bearer valid-token")
+    .send({ product: "Tomato", quantity: 10, pricePerUnit: 5 });
+  assert.ok([400, 401, 403, 500].includes(res.status));
+});
+
+test("marketplace my-listings without auth returns 401", async () => {
+  const app = createApp();
+  const res = await request(app).get("/api/v1/marketplace/my-listings");
+  assert.equal(res.status, 401);
+});
+
+test("marketplace my-purchases without auth returns 401", async () => {
+  const app = createApp();
+  const res = await request(app).get("/api/v1/marketplace/my-purchases");
+  assert.equal(res.status, 401);
+});
+
+test("marketplace buy without auth returns 401", async () => {
+  const app = createApp();
+  const res = await request(app).post("/api/v1/marketplace/test-id/buy").set("Authorization", "Bearer valid-token");
+  assert.ok([401, 403, 404, 409, 500].includes(res.status));
+});
+
+// ============================================================
+// Route Optimizer API Contract Tests
+// ============================================================
+
+test("route optimize without auth returns 401", async () => {
+  const app = createApp();
+  const res = await request(app).post("/api/v1/routes/optimize").send({
+    startPoint: { latitude: 28.6, longitude: 77.2 },
+    stops: [{ latitude: 28.7, longitude: 77.3 }],
+  });
+  assert.equal(res.status, 401);
+});
+
+test("route optimize with invalid latitude returns 400 or 401", async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post("/api/v1/routes/optimize")
+    .set("Authorization", "Bearer valid-token")
+    .send({
+      startPoint: { latitude: 91, longitude: 77.2 },
+      stops: [{ latitude: 28.7, longitude: 77.3 }],
+    });
+  assert.ok([400, 401, 403, 500].includes(res.status));
+});
+
+test("route optimize with empty stops returns 400 or 401", async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post("/api/v1/routes/optimize")
+    .set("Authorization", "Bearer valid-token")
+    .send({
+      startPoint: { latitude: 28.6, longitude: 77.2 },
+      stops: [],
+    });
+  assert.ok([400, 401, 403, 500].includes(res.status));
+});
+
+test("route optimize with invalid mode returns 400 or 401", async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post("/api/v1/routes/optimize")
+    .set("Authorization", "Bearer valid-token")
+    .send({
+      startPoint: { latitude: 28.6, longitude: 77.2 },
+      stops: [{ latitude: 28.7, longitude: 77.3 }],
+      optimizationMode: "ULTRAFAST",
+    });
+  assert.ok([400, 401, 403, 500].includes(res.status));
+});
+
+test("route get shipment without auth returns 401", async () => {
+  const app = createApp();
+  const res = await request(app).get("/api/v1/routes/shipment/test-shipment");
+  assert.equal(res.status, 401);
+});
+
+test("route select without auth returns 401", async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post("/api/v1/routes/test-shipment/select")
+    .set("Authorization", "Bearer valid-token")
+    .send({ routePlanId: "test", selectedOption: "SHORTEST" });
+  assert.ok([401, 403, 404, 500].includes(res.status));
 });

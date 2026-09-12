@@ -28,6 +28,9 @@ import Analytics from "../pages/Analytics";
 import Reports from "../pages/Reports";
 import Profile from "../pages/Profile";
 
+import Marketplace from "../pages/marketplace/Marketplace";
+import SmartRoute from "../pages/routes/SmartRoute";
+
 import PublicTrace from "../pages/PublicTrace";
 
 const AppRoutes = () => {
@@ -134,6 +137,20 @@ const AppRoutes = () => {
           <Route
             path="/profile"
             element={<Profile />}
+          />
+
+          {/* Marketplace */}
+
+          <Route
+            path="/marketplace"
+            element={<Marketplace />}
+          />
+
+          {/* Smart Route */}
+
+          <Route
+            path="/routes/smart"
+            element={<SmartRoute />}
           />
         </Route>
       </Route>

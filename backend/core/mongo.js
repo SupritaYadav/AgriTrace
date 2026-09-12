@@ -16,8 +16,10 @@ export async function connectMongo() {
   collections.devices = mongoDb.collection("devices");
   collections.shipments = mongoDb.collection("shipments");
   collections.alerts = mongoDb.collection("alerts");
-  collections.timeline = mongoDb.collection("timeline");
+   collections.timeline = mongoDb.collection("timeline");
   collections.integrityCheckpoints = mongoDb.collection("integrityCheckpoints");
+  collections.listings = mongoDb.collection("listings");
+  collections.routePlans = mongoDb.collection("routePlans");
 
   // Telemetry indexes (preserved from original)
   await collections.telemetry.createIndex({ deviceId: 1 });
@@ -66,7 +68,21 @@ export async function connectMongo() {
   // integrityCheckpoints indexes
   await collections.integrityCheckpoints.createIndex({ checkpointId: 1 }, { unique: true });
   await collections.integrityCheckpoints.createIndex({ shipmentId: 1 });
-  await collections.integrityCheckpoints.createIndex({ createdAt: -1 });
+   await collections.integrityCheckpoints.createIndex({ createdAt: -1 });
+
+  // listings indexes
+  await collections.listings.createIndex({ listingId: 1 }, { unique: true });
+  await collections.listings.createIndex({ farmerId: 1 });
+  await collections.listings.createIndex({ buyerId: 1 });
+  await collections.listings.createIndex({ status: 1 });
+  await collections.listings.createIndex({ product: 1 });
+  await collections.listings.createIndex({ createdAt: -1 });
+
+  // routePlans indexes
+  await collections.routePlans.createIndex({ routePlanId: 1 }, { unique: true });
+  await collections.routePlans.createIndex({ shipmentId: 1 });
+  await collections.routePlans.createIndex({ transporterId: 1 });
+  await collections.routePlans.createIndex({ createdAt: -1 });
 
   console.log("MongoDB connected and indexes created");
 }

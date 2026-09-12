@@ -1,4 +1,5 @@
-import { getTelemetryCollection } from "../core/mongo.js";
+import { getTelemetryCollection, getCollection } from "../core/mongo.js";
+import { Role } from "../core/roles.js";
 import { listShipments } from "./shipmentService.js";
 import { listDevices } from "./deviceService.js";
 import { listAlerts } from "./alertService.js";
@@ -38,7 +39,7 @@ export async function getDashboardSummary(uid, role) {
 
   let devices;
 
-  if (role === "ADMIN") {
+  if (role === Role.ADMIN) {
     devices = allDevices;
   } else {
     devices = allDevices.filter(
@@ -144,16 +145,54 @@ export async function getDashboardSummary(uid, role) {
     )
     .slice(0, 5);
 
+   // --------------------------------------------------
+   // 7. Recent alerts
+   // --------------------------------------------------
+   const recentAlerts = [...alerts]
+     .sort(
+       (a, b) =>
+         new Date(b.timestamp || 0) -
+         new Date(a.timestamp || 0)
+     )
+     .slice(0, 5);
+
   // --------------------------------------------------
-  // 7. Recent alerts
+  // 8. Marketplace metrics (role-aware)
   // --------------------------------------------------
-  const recentAlerts = [...alerts]
-    .sort(
-      (a, b) =>
-        new Date(b.timestamp || 0) -
-        new Date(a.timestamp || 0)
-    )
-    .slice(0, 5);
+  let availableListings = 0;
+  let totalListings = 0;
+  let soldListings = 0;
+
+  if (role === Role.FARMER) {
+    const farmerListings = await getCollection("listings").find({ farmerId: uid }).toArray();
+    availableListings = farmerListings.filter((l) => l.status === "AVAILABLE").length;
+    soldListings = farmerListings.filter((l) => l.status === "SOLD").length;
+    totalListings = farmerListings.length;
+  } else if (role === Role.ADMIN) {
+    const pipeline = [
+      { $group: {
+        _id: null,
+        total: { $sum: 1 },
+        available: { $sum: { $cond: [{ $eq: ["$status", "AVAILABLE"] }, 1, 0] } },
+        sold: { $sum: { $cond: [{ $eq: ["$status", "SOLD"] }, 1, 0] } },
+      } },
+    ];
+    const aggResult = await getCollection("listings").aggregate(pipeline).toArray();
+    if (aggResult.length > 0) {
+      totalListings = aggResult[0].total;
+      availableListings = aggResult[0].available;
+      soldListings = aggResult[0].sold;
+    }
+  }
+
+  // --------------------------------------------------
+  // 9. Route plan metrics (role-aware)
+  // --------------------------------------------------
+  let routesOptimized = 0;
+  if (role === Role.TRANSPORTER || role === Role.ADMIN) {
+    const match = role === Role.TRANSPORTER ? { transporterId: uid } : {};
+    routesOptimized = await getCollection("routePlans").countDocuments(match);
+  }
 
   return {
     activeShipments,
@@ -168,5 +207,11 @@ export async function getDashboardSummary(uid, role) {
       Number(averageHumidity.toFixed(2)),
     recentShipments,
     recentAlerts,
+    marketplace: {
+      availableListings,
+      soldListings,
+      totalListings,
+    },
+    routesOptimized,
   };
 }

@@ -48,6 +48,15 @@ function ShipmentDetails() {
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState(null);
+  const [thresholdEditor, setThresholdEditor] = useState(null);
+  const [assignEditor, setAssignEditor] = useState(null);
+  const [thresholdValues, setThresholdValues] = useState({
+    temperatureMin: shipment?.thresholds?.temperature?.min ?? "",
+    temperatureMax: shipment?.thresholds?.temperature?.max ?? "",
+    humidityMin: shipment?.thresholds?.humidity?.min ?? "",
+    humidityMax: shipment?.thresholds?.humidity?.max ?? "",
+    gasLevelMax: shipment?.thresholds?.gasLevel?.max ?? "",
+  });
 
   const fetchData = async () => {
     if (!id) {
@@ -67,6 +76,13 @@ function ShipmentDetails() {
       setShipment(shipmentRes ?? null);
       setTimeline(Array.isArray(timelineRes) ? timelineRes : []);
       setIntegrity(integrityRes ?? null);
+      setThresholdValues({
+        temperatureMin: shipmentRes?.thresholds?.temperature?.min ?? "",
+        temperatureMax: shipmentRes?.thresholds?.temperature?.max ?? "",
+        humidityMin: shipmentRes?.thresholds?.humidity?.min ?? "",
+        humidityMax: shipmentRes?.thresholds?.humidity?.max ?? "",
+        gasLevelMax: shipmentRes?.thresholds?.gasLevel?.max ?? "",
+      });
     } catch (err) {
       console.error(err);
       setError(err.message || "Failed to load shipment details");
@@ -124,71 +140,88 @@ function ShipmentDetails() {
       });
   };
 
-  const handleAssignDevice = () => {
-    const deviceId = prompt("Enter device ID to assign:");
-    if (!deviceId) return;
+  const handleAssignDevice = async (deviceId) => {
+    if (!deviceId?.trim()) return;
     setActionLoading(true);
     setActionError(null);
-    assignDeviceToShipment(deviceId, id)
-      .then(() => {
-        setActionLoading(false);
-        fetchData();
-      })
-      .catch((err) => {
-        console.error(err);
-        setActionError(err.message || "Failed to assign device");
-        setActionLoading(false);
-      });
+    setAssignEditor(null);
+    try {
+      await assignDeviceToShipment(deviceId.trim(), id);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      setActionError(err.message || "Failed to assign device");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleAssignTransporter = () => {
-    const transporterId = prompt("Enter transporter ID:");
-    if (!transporterId) return;
+  const handleAssignTransporter = async (transporterId) => {
+    if (!transporterId?.trim()) return;
     setActionLoading(true);
     setActionError(null);
-    assignTransporter(id, transporterId)
-      .then(() => {
-        setActionLoading(false);
-        fetchData();
-      })
-      .catch((err) => {
-        console.error(err);
-        setActionError(err.message || "Failed to assign transporter");
-        setActionLoading(false);
-      });
+    setAssignEditor(null);
+    try {
+      await assignTransporter(id, transporterId.trim());
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      setActionError(err.message || "Failed to assign transporter");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleAssignWarehouse = () => {
-    const warehouseId = prompt("Enter warehouse ID:");
-    if (!warehouseId) return;
+  const handleAssignWarehouse = async (warehouseId) => {
+    if (!warehouseId?.trim()) return;
     setActionLoading(true);
     setActionError(null);
-    assignWarehouse(id, warehouseId)
-      .then(() => {
-        setActionLoading(false);
-        fetchData();
-      })
-      .catch((err) => {
-        console.error(err);
-        setActionError(err.message || "Failed to assign warehouse");
-        setActionLoading(false);
-      });
+    setAssignEditor(null);
+    try {
+      await assignWarehouse(id, warehouseId.trim());
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      setActionError(err.message || "Failed to assign warehouse");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleUpdateThresholds = async () => {
+    const tempMin = parseFloat(thresholdValues.temperatureMin);
+    const tempMax = parseFloat(thresholdValues.temperatureMax);
+    const humidMin = parseFloat(thresholdValues.humidityMin);
+    const humidMax = parseFloat(thresholdValues.humidityMax);
+    const gasMax = parseFloat(thresholdValues.gasLevelMax);
+
+    if (isNaN(tempMin) || isNaN(tempMax) || tempMin >= tempMax) {
+      setActionError("Temperature min must be less than max");
+      return;
+    }
+    if (isNaN(humidMin) || isNaN(humidMax) || humidMin >= humidMax) {
+      setActionError("Humidity min must be less than max");
+      return;
+    }
+    if (isNaN(gasMax) || gasMax < 0) {
+      setActionError("Gas level max must be non-negative");
+      return;
+    }
+
     setActionLoading(true);
     setActionError(null);
+    setThresholdEditor(null);
     try {
       await updateShipmentThresholds(id, {
-        temperature: { min: 8, max: 28 },
-        humidity: { min: 40, max: 80 },
-        gasLevel: { max: 50 },
+        temperature: { min: tempMin, max: tempMax },
+        humidity: { min: humidMin, max: humidMax },
+        gasLevel: { max: gasMax },
       });
-      setActionLoading(false);
       fetchData();
     } catch (err) {
       console.error(err);
       setActionError(err.message || "Failed to update thresholds");
+    } finally {
       setActionLoading(false);
     }
   };
@@ -288,22 +321,22 @@ function ShipmentDetails() {
             </button>
           ))}
           {role === "ADMIN" || role === "FARMER" ? (
-            <button className="btn secondary" disabled={actionLoading} onClick={handleAssignDevice}>
+            <button className="btn secondary" disabled={actionLoading} onClick={() => setAssignEditor("device")}>
               Assign Device
             </button>
           ) : null}
           {role === "ADMIN" || role === "FARMER" ? (
-            <button className="btn secondary" disabled={actionLoading} onClick={handleAssignTransporter}>
+            <button className="btn secondary" disabled={actionLoading} onClick={() => setAssignEditor("transporter")}>
               Assign Transporter
             </button>
           ) : null}
           {role === "ADMIN" || role === "FARMER" ? (
-            <button className="btn secondary" disabled={actionLoading} onClick={handleAssignWarehouse}>
+            <button className="btn secondary" disabled={actionLoading} onClick={() => setAssignEditor("warehouse")}>
               Assign Warehouse
             </button>
           ) : null}
           {role === "ADMIN" || role === "FARMER" ? (
-            <button className="btn secondary" disabled={actionLoading} onClick={handleUpdateThresholds}>
+            <button className="btn secondary" disabled={actionLoading} onClick={() => setThresholdEditor(true)}>
               Update Thresholds
             </button>
           ) : null}
@@ -381,6 +414,120 @@ function ShipmentDetails() {
           </button>
         </article>
       </section>
+
+      {/* Assign Editor Modal */}
+      {assignEditor && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h3>
+                {assignEditor === "device" ? "Assign Device" :
+                 assignEditor === "transporter" ? "Assign Transporter" :
+                 "Assign Warehouse"}
+              </h3>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const value = e.target.elements.id.value.trim();
+                if (assignEditor === "device") handleAssignDevice(value);
+                else if (assignEditor === "transporter") handleAssignTransporter(value);
+                else handleAssignWarehouse(value);
+              }}
+            >
+              <div className="form-group">
+                <label>
+                  {assignEditor === "device" ? "Device ID" :
+                   assignEditor === "transporter" ? "Transporter ID" :
+                   "Warehouse ID"}
+                </label>
+                <input type="text" name="id" placeholder="Enter ID..." required disabled={actionLoading} />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn secondary" onClick={() => setAssignEditor(null)} disabled={actionLoading}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn primary" disabled={actionLoading}>
+                  {actionLoading ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Threshold Editor Modal */}
+      {thresholdEditor && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h3>Update Environmental Thresholds</h3>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleUpdateThresholds();
+              }}
+            >
+              <div className="form-group">
+                <label>Temperature Min (°C)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={thresholdValues.temperatureMin}
+                  onChange={(e) => setThresholdValues({ ...thresholdValues, temperatureMin: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Temperature Max (°C)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={thresholdValues.temperatureMax}
+                  onChange={(e) => setThresholdValues({ ...thresholdValues, temperatureMax: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Humidity Min (%)</label>
+                <input
+                  type="number"
+                  value={thresholdValues.humidityMin}
+                  onChange={(e) => setThresholdValues({ ...thresholdValues, humidityMin: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Humidity Max (%)</label>
+                <input
+                  type="number"
+                  value={thresholdValues.humidityMax}
+                  onChange={(e) => setThresholdValues({ ...thresholdValues, humidityMax: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Gas Level Max</label>
+                <input
+                  type="number"
+                  value={thresholdValues.gasLevelMax}
+                  onChange={(e) => setThresholdValues({ ...thresholdValues, gasLevelMax: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn secondary" onClick={() => setThresholdEditor(null)} disabled={actionLoading}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn primary" disabled={actionLoading}>
+                  {actionLoading ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

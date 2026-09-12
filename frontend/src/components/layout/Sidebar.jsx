@@ -171,6 +171,26 @@ const Sidebar = ({
           </NavLink>
 
           <NavLink
+            to="/marketplace"
+            className={({ isActive }) =>
+              `nav-item ${isActive ? "active-page" : ""}`
+            }
+          >
+            <i className="fa-solid fa-store"></i>
+            <span>Marketplace</span>
+          </NavLink>
+
+          <NavLink
+            to="/routes/smart"
+            className={({ isActive }) =>
+              `nav-item ${isActive ? "active-page" : ""}`
+            }
+          >
+            <i className="fa-solid fa-globe-with-compass"></i>
+            <span>Smart Route</span>
+          </NavLink>
+
+          <NavLink
             to="/analytics"
             className={({ isActive }) =>
               `nav-item ${isActive ? "active-page" : ""}`
