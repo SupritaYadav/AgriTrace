@@ -55,16 +55,18 @@ export async function getDashboardSummary(uid, role, user = null) {
 
   const telemetryCollection = getTelemetryCollection();
 
-  let averageTemperature = 0;
-  let averageHumidity = 0;
+  let averageTemperature = null;
+  let averageHumidity = null;
 
-  if (role === "ADMIN" || shipmentIds.length > 0) {
+  const accessibleShipmentIds = shipmentIds.filter(Boolean);
+
+  if (role === "ADMIN" || accessibleShipmentIds.length > 0) {
     const match =
       role === "ADMIN"
-        ? {}
+        ? { shipmentId: { $nin: [null, ""] } }
         : {
             shipmentId: {
-              $in: shipmentIds,
+              $in: accessibleShipmentIds,
             },
           };
 
@@ -76,6 +78,7 @@ export async function getDashboardSummary(uid, role, user = null) {
         {
           $group: {
             _id: null,
+            count: { $sum: 1 },
             averageTemperature: {
               $avg: "$temperature",
             },
@@ -87,12 +90,14 @@ export async function getDashboardSummary(uid, role, user = null) {
       ])
       .toArray();
 
-    if (aggregate.length > 0) {
-      averageTemperature =
-        aggregate[0].averageTemperature || 0;
+    if (aggregate.length > 0 && aggregate[0].count > 0) {
+      averageTemperature = Number.isFinite(aggregate[0].averageTemperature)
+        ? aggregate[0].averageTemperature
+        : null;
 
-      averageHumidity =
-        aggregate[0].averageHumidity || 0;
+      averageHumidity = Number.isFinite(aggregate[0].averageHumidity)
+        ? aggregate[0].averageHumidity
+        : null;
     }
   }
 
@@ -152,9 +157,13 @@ export async function getDashboardSummary(uid, role, user = null) {
     openAlerts,
     criticalAlerts,
     averageTemperature:
-      Number(averageTemperature.toFixed(2)),
+      Number.isFinite(averageTemperature)
+        ? Number(averageTemperature.toFixed(2))
+        : null,
     averageHumidity:
-      Number(averageHumidity.toFixed(2)),
+      Number.isFinite(averageHumidity)
+        ? Number(averageHumidity.toFixed(2))
+        : null,
     recentShipments,
     recentAlerts,
     marketplace: {

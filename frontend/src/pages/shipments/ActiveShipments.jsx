@@ -113,7 +113,6 @@ function ActiveShipments() {
         </select>
         <select value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="recent">Sort: Most Recent</option>
-          <option value="temp">Sort: Temperature</option>
           <option value="id">Sort: Shipment ID</option>
         </select>
         <div className="shipment-view-toggle">
@@ -154,12 +153,6 @@ function ActiveShipments() {
                 <FaArrowRight />
                 <span>{shipment.destination}</span>
               </div>
-              <div className="sc-stats">
-                <div className="sc-stat"><span>Temp</span><strong>{shipment.temperature !== undefined ? `${shipment.temperature}°C` : '--'}</strong></div>
-                <div className="sc-stat"><span>Humidity</span><strong>{shipment.humidity !== undefined ? `${shipment.humidity}%` : '--'}</strong></div>
-                <div className="sc-stat"><span>Gas</span><strong>{shipment.gas ?? '--'}</strong></div>
-                <div className="sc-stat"><span>Battery</span><strong>{shipment.battery !== undefined ? `${shipment.battery}%` : '--'}</strong></div>
-              </div>
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width: `${shipment.progress}%` }} />
               </div>
@@ -194,7 +187,6 @@ function ActiveShipments() {
                   <th>Destination</th>
                   <th>Device</th>
                   <th>Status</th>
-                  <th>Temp</th>
                   <th>Updated</th>
                   <th></th>
                 </tr>
@@ -208,7 +200,6 @@ function ActiveShipments() {
                     <td>{shipment.destination}</td>
                     <td>{shipment.device || "—"}</td>
                     <td><span className={`badge ${getStatusClass(shipment.status)}`}>{shipment.status}</span></td>
-                    <td>{shipment.temp}°C</td>
                     <td>{shipment.updated}</td>
                     <td>
                       <Link className="btn ghost small" to={`/shipments/${shipment.id}`}>View</Link>

@@ -87,8 +87,53 @@ function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+const SHIPMENT_SENSOR_FIELDS = [
+  "temperature",
+  "humidity",
+  "battery",
+  "gas",
+  "gasLevel",
+  "latitude",
+  "longitude",
+  "progress",
+  "stage",
+  "temp",
+  "device",
+  "latestTelemetry",
+];
+
+function sanitizeShipment(shipment) {
+  if (!shipment || typeof shipment !== "object") return shipment;
+  const cleaned = { ...shipment };
+  for (const field of SHIPMENT_SENSOR_FIELDS) {
+    delete cleaned[field];
+  }
+  return cleaned;
+}
+
 export async function createShipment(data, createdBy, role) {
-  const thresholds = data?.thresholds || {
+  const {
+    thresholds: incomingThresholds,
+    assignedDevice: _ignoredAssignedDevice,
+    status: _ignoredStatus,
+    shipmentId: _ignoredShipmentId,
+    deviceId: _ignoredDeviceId,
+    temperature: _t,
+    humidity: _h,
+    battery: _b,
+    gas: _g,
+    gasLevel: _gl,
+    latitude: _lat,
+    longitude: _lon,
+    progress: _p,
+    stage: _st,
+    temp: _temp,
+    device: _device,
+    latestTelemetry: _lt,
+    ...safeData
+  } = data || {};
+
+  const thresholds = incomingThresholds || {
     temperature: { min: null, max: null },
     humidity: { min: null, max: null },
     gasLevel: { max: null },
@@ -116,7 +161,7 @@ export async function createShipment(data, createdBy, role) {
   const now = new Date().toISOString();
 
   const shipmentData = {
-    ...data,
+    ...safeData,
     shipmentId,
     trackingId,
     createdBy,
@@ -176,7 +221,7 @@ export async function updateShipmentThresholds(shipmentId, thresholds, actorId =
     await addTimelineEvent(shipmentId, "THRESHOLDS_UPDATED", actorId, { thresholds });
   }
 
-  return shipments.findOne({ shipmentId });
+  return sanitizeShipment(await shipments.findOne({ shipmentId }));
 }
 
 export async function updateShipmentStatus(shipmentId, status, actorId, actorRole = null) {
@@ -195,7 +240,7 @@ export async function updateShipmentStatus(shipmentId, status, actorId, actorRol
 
   const currentStatus = shipment.status;
   if (currentStatus === status) {
-    return shipment;
+    return sanitizeShipment(shipment);
   }
 
   const allowedNextStatuses = ALLOWED_STATUS_TRANSITIONS[currentStatus] || [];
@@ -234,7 +279,7 @@ export async function updateShipmentStatus(shipmentId, status, actorId, actorRol
 
   await addTimelineEvent(shipmentId, timelineMap[status], actorId, { status });
 
-  return shipments.findOne({ shipmentId });
+  return sanitizeShipment(await shipments.findOne({ shipmentId }));
 }
 
 async function validateAssignedUser(targetId, expectedRole) {
@@ -273,7 +318,7 @@ export async function assignTransporter(shipmentId, transporterId, actorId, acto
 
   await addTimelineEvent(shipmentId, "TRANSPORTER_ASSIGNED", actorId, { transporterId });
 
-  return shipments.findOne({ shipmentId });
+  return sanitizeShipment(await shipments.findOne({ shipmentId }));
 }
 
 export async function assignWarehouse(shipmentId, warehouseId, actorId, actorRole = null) {
@@ -302,7 +347,7 @@ export async function assignWarehouse(shipmentId, warehouseId, actorId, actorRol
 
   await addTimelineEvent(shipmentId, "WAREHOUSE_ASSIGNED", actorId, { warehouseId });
 
-  return shipments.findOne({ shipmentId });
+  return sanitizeShipment(await shipments.findOne({ shipmentId }));
 }
 
 export async function assignRetailer(shipmentId, retailerId, actorId, actorRole = null) {
@@ -331,7 +376,7 @@ export async function assignRetailer(shipmentId, retailerId, actorId, actorRole 
 
   await addTimelineEvent(shipmentId, "RETAILER_ASSIGNED", actorId, { retailerId });
 
-  return shipments.findOne({ shipmentId });
+  return sanitizeShipment(await shipments.findOne({ shipmentId }));
 }
 
 export { canAccessShipment, buildShipmentAccessFilter };
@@ -341,7 +386,8 @@ export async function listShipments(uid, role) {
 
   const filter = buildShipmentAccessFilter({ uid, role });
 
-  return shipments.find(filter).sort({ createdAt: -1 }).toArray();
+  const docs = await shipments.find(filter).sort({ createdAt: -1 }).toArray();
+  return docs.map(sanitizeShipment);
 }
 
 export async function getShipmentForUser(shipmentId, uid, role) {
@@ -354,13 +400,14 @@ export async function getShipmentForUser(shipmentId, uid, role) {
 
   if (!shipment) return null;
 
-  return shipment;
+  return sanitizeShipment(shipment);
 }
 
 export async function getShipment(shipmentId, uid = null, role = null) {
   const access = buildShipmentAccessFilter({ uid, role });
-  return getCollection("shipments").findOne({
+  const shipment = await getCollection("shipments").findOne({
     shipmentId,
     ...access,
   });
+  return sanitizeShipment(shipment);
 }

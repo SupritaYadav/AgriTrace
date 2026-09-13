@@ -73,11 +73,24 @@ async function buildDeviceHealthResponse(device) {
     { sort: { timestamp: -1 } }
   );
 
+  if (!latestTelemetry) {
+    return {
+      deviceId: device.deviceId,
+      status: "UNKNOWN",
+      battery: null,
+      lastSeenAt: null,
+      firmwareVersion: device.firmwareVersion ?? null,
+      currentShipmentId: device.currentShipmentId ?? null,
+      latestTelemetry: null,
+    };
+  }
+
   let status = "OFFLINE";
-  if (device.lastSeenAt) {
-    const lastSeen = new Date(device.lastSeenAt).getTime();
+  const lastSeenAt = device.lastSeenAt || latestTelemetry.timestamp || null;
+  if (lastSeenAt) {
+    const lastSeen = new Date(lastSeenAt).getTime();
     const difference = Date.now() - lastSeen;
-    if (difference <= 5 * 60 * 1000) {
+    if (Number.isFinite(lastSeen) && difference <= 5 * 60 * 1000) {
       status = "ONLINE";
     }
   }
@@ -85,11 +98,13 @@ async function buildDeviceHealthResponse(device) {
   return {
     deviceId: device.deviceId,
     status,
-    battery: device.battery ?? null,
-    lastSeenAt: device.lastSeenAt ?? null,
+    battery: Number.isFinite(latestTelemetry.battery)
+      ? Number(latestTelemetry.battery)
+      : null,
+    lastSeenAt: lastSeenAt ?? null,
     firmwareVersion: device.firmwareVersion ?? null,
     currentShipmentId: device.currentShipmentId ?? null,
-    latestTelemetry: latestTelemetry || null,
+    latestTelemetry,
   };
 }
 

@@ -65,7 +65,7 @@ export async function getPublicTraceByTrackingId(trackingId) {
     hasMonitoringDevice: hasDevice,
     environment: hasDevice
       ? {
-          condition: environmentSummary?.condition || "GOOD",
+          condition: environmentSummary?.condition ?? "NO_DATA",
           averageTemperature: environmentSummary?.temperature?.average ?? null,
           averageHumidity: environmentSummary?.humidity?.average ?? null,
           maxGasLevel: environmentSummary?.gasLevel?.max ?? null,

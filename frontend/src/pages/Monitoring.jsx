@@ -52,9 +52,9 @@ function Monitoring() {
       const shipment = shipments.find(s => (s.shipmentId || s.id) === shipmentId);
       const deviceId = shipment?.assignedDevice || shipment?.device || "";
       setSelectedDeviceId(deviceId);
+      setTelemetry(null);
+      setHistory({ temperature: [], humidity: [], battery: [] });
       if (!deviceId) {
-        setTelemetry(null);
-        setHistory({ temperature: [], humidity: [], battery: [] });
         return;
       }
       try {
@@ -62,7 +62,7 @@ function Monitoring() {
           getLatestDeviceTelemetry(deviceId),
           getDeviceTelemetryHistory(deviceId, { limit, page })
         ]);
-        setTelemetry(latestRes ?? {});
+        setTelemetry(latestRes ?? null);
         const histData = Array.isArray(historyRes) ? historyRes : [];
         setHistory({
           temperature: histData.map(d => d.temperature),
@@ -78,12 +78,12 @@ function Monitoring() {
   }, [shipmentId, shipments, page, limit]);
 
   useEffect(() => {
-    if (!selectedDeviceId) return;
+    if (!selectedDeviceId || !shipmentId) return;
     const wsUrl = import.meta.env.VITE_WS_URL;
     if (!wsUrl) return;
     websocketService.connect(wsUrl);
     const unsubscribe = websocketService.on("telemetry.updated", payload => {
-      if (payload.deviceId === selectedDeviceId) {
+      if (payload.deviceId === selectedDeviceId && payload.shipmentId === shipmentId) {
         setTelemetry(payload);
         setHistory(prev => ({
           temperature: [...prev.temperature.slice(-HISTORY_LENGTH + 1), payload.temperature],
@@ -95,15 +95,33 @@ function Monitoring() {
     return () => {
       unsubscribe();
     };
-  }, [selectedDeviceId]);
+  }, [selectedDeviceId, shipmentId]);
 
   if (loading) return <LoadingSpinner />;
   if (error) return <EmptyState message={error} />;
 
-  const unsafe = telemetry?.temperature > 28 || telemetry?.humidity > 80 || telemetry?.gasLevel !== "Safe";
+  const hasDevice = !!selectedDeviceId;
+  const hasTelemetry = telemetry != null;
+  const unsafe = hasTelemetry && (telemetry.temperature > 28 || telemetry.humidity > 80 || telemetry.gasLevel !== "Safe");
 
   const handlePrevPage = () => setPage(p => Math.max(p - 1, 1));
   const handleNextPage = () => setPage(p => p + 1);
+
+  let statusMessage;
+  let statusClass;
+  if (!hasDevice) {
+    statusMessage = "No monitoring device assigned";
+    statusClass = "idle";
+  } else if (!hasTelemetry) {
+    statusMessage = "Waiting for first telemetry reading...";
+    statusClass = "idle";
+  } else if (unsafe) {
+    statusMessage = "Warning: One or more environmental parameters are outside the configured safety range.";
+    statusClass = "warning";
+  } else {
+    statusMessage = "All environmental parameters are currently within safe limits.";
+    statusClass = "safe";
+  }
 
   return (
     <div className="page-container">
@@ -136,42 +154,40 @@ function Monitoring() {
         <div className="live-pill"><span />LIVE</div>
       </section>
 
-      <section className={`status-banner ${unsafe ? "warning" : "safe"}`}>
-        {unsafe
-          ? "Warning: One or more environmental parameters are outside the configured safety range."
-          : "All environmental parameters are currently within safe limits."}
+      <section className={`status-banner ${statusClass}`}>
+        {statusMessage}
       </section>
 
       <section className="sensor-grid">
         <SensorCard
           icon={<FaTemperatureHalf />}
           title="Temperature"
-          value={telemetry?.temperature != null ? `${telemetry.temperature}°C` : "N/A"}
+          value={hasTelemetry && telemetry.temperature != null ? `${telemetry.temperature}°C` : "—"}
           subtitle="8°C – 28°C"
-          status={telemetry?.temperature > 28 ? "warning" : "safe"}
+          status={hasTelemetry && telemetry.temperature > 28 ? "warning" : hasTelemetry ? "safe" : "idle"}
           history={history.temperature}
         />
         <SensorCard
           icon={<FaDroplet />}
           title="Humidity"
-          value={telemetry?.humidity != null ? `${telemetry.humidity}%` : "N/A"}
+          value={hasTelemetry && telemetry.humidity != null ? `${telemetry.humidity}%` : "—"}
           subtitle="40% – 80%"
-          status={telemetry?.humidity > 80 ? "warning" : "safe"}
+          status={hasTelemetry && telemetry.humidity > 80 ? "warning" : hasTelemetry ? "safe" : "idle"}
           history={history.humidity}
         />
         <SensorCard
           icon={<FaLeaf />}
           title="Gas Level"
-          value={telemetry?.gasLevel ?? "N/A"}
+          value={hasTelemetry && telemetry.gasLevel != null ? `${telemetry.gasLevel}` : "—"}
           subtitle="Environmental safety"
-          status={telemetry?.gasLevel === "Safe" ? "safe" : "warning"}
+          status={hasTelemetry && telemetry.gasLevel !== "Safe" ? "warning" : hasTelemetry ? "safe" : "idle"}
         />
         <SensorCard
           icon={<FaBatteryThreeQuarters />}
           title="Battery"
-          value={telemetry?.battery != null ? `${telemetry.battery}%` : "N/A"}
-          subtitle={selectedDeviceId || "No device"}
-          status={telemetry?.battery < 25 ? "warning" : "safe"}
+          value={hasTelemetry && telemetry.battery != null ? `${telemetry.battery}%` : "—"}
+          subtitle={hasDevice ? selectedDeviceId : "No device"}
+          status={hasTelemetry && telemetry.battery < 25 ? "warning" : hasTelemetry ? "safe" : "idle"}
           history={history.battery}
         />
       </section>

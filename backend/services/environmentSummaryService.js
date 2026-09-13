@@ -111,59 +111,62 @@ export async function getShipmentEnvironmentSummary(shipmentId) {
 
   const readings = baseSummary?.readings || 0;
   const temperature = {
-    min: toNumberOrNull(baseSummary?.temperatureMin),
-    max: toNumberOrNull(baseSummary?.temperatureMax),
-    average: toNumberOrNull(baseSummary?.temperatureAverage),
+    min: readings > 0 ? toNumberOrNull(baseSummary?.temperatureMin) : null,
+    max: readings > 0 ? toNumberOrNull(baseSummary?.temperatureMax) : null,
+    average: readings > 0 ? toNumberOrNull(baseSummary?.temperatureAverage) : null,
   };
 
   const humidity = {
-    min: toNumberOrNull(baseSummary?.humidityMin),
-    max: toNumberOrNull(baseSummary?.humidityMax),
-    average: toNumberOrNull(baseSummary?.humidityAverage),
+    min: readings > 0 ? toNumberOrNull(baseSummary?.humidityMin) : null,
+    max: readings > 0 ? toNumberOrNull(baseSummary?.humidityMax) : null,
+    average: readings > 0 ? toNumberOrNull(baseSummary?.humidityAverage) : null,
   };
 
   const gasLevel = {
-    min: toNumberOrNull(baseSummary?.gasMin),
-    max: toNumberOrNull(baseSummary?.gasMax),
-    average: toNumberOrNull(baseSummary?.gasAverage),
+    min: readings > 0 ? toNumberOrNull(baseSummary?.gasMin) : null,
+    max: readings > 0 ? toNumberOrNull(baseSummary?.gasMax) : null,
+    average: readings > 0 ? toNumberOrNull(baseSummary?.gasAverage) : null,
   };
 
   const battery = {
-    min: toNumberOrNull(baseSummary?.batteryMin),
-    max: toNumberOrNull(baseSummary?.batteryMax),
-    average: toNumberOrNull(baseSummary?.batteryAverage),
+    min: readings > 0 ? toNumberOrNull(baseSummary?.batteryMin) : null,
+    max: readings > 0 ? toNumberOrNull(baseSummary?.batteryMax) : null,
+    average: readings > 0 ? toNumberOrNull(baseSummary?.batteryAverage) : null,
     latest: null,
   };
 
-  const latestBattery = await telemetryCollection.findOne(
-    { shipmentId },
-    { sort: { timestamp: -1 }, projection: { battery: 1 } }
-  );
+  if (readings > 0) {
+    const latestBattery = await telemetryCollection.findOne(
+      { shipmentId },
+      { sort: { timestamp: -1 }, projection: { battery: 1 } }
+    );
 
-  if (latestBattery && Number.isFinite(latestBattery.battery)) {
-    battery.latest = Number(latestBattery.battery);
+    if (latestBattery && Number.isFinite(latestBattery.battery)) {
+      battery.latest = Number(latestBattery.battery);
+    }
   }
 
-  const tempViolations = Number(violationsSummary.temperatureViolations || 0);
-  const humidityViolations = Number(violationsSummary.humidityViolations || 0);
-  const gasViolations = Number(violationsSummary.gasViolations || 0);
+  const tempViolations = readings > 0 ? Number(violationsSummary.temperatureViolations || 0) : 0;
+  const humidityViolations = readings > 0 ? Number(violationsSummary.humidityViolations || 0) : 0;
+  const gasViolations = readings > 0 ? Number(violationsSummary.gasViolations || 0) : 0;
   const totalViolations = tempViolations + humidityViolations + gasViolations;
 
   return {
     shipmentId,
     readings,
+    readingCount: readings,
     temperature,
     humidity,
     gasLevel,
     battery,
-    firstReadingAt: baseSummary?.firstReadingAt || null,
-    lastReadingAt: baseSummary?.lastReadingAt || null,
+    firstReadingAt: readings > 0 ? (baseSummary?.firstReadingAt || null) : null,
+    lastReadingAt: readings > 0 ? (baseSummary?.lastReadingAt || null) : null,
     violations: {
       temperature: tempViolations,
       humidity: humidityViolations,
       gas: gasViolations,
       total: totalViolations,
     },
-    condition: getCondition(totalViolations),
+    condition: readings === 0 ? "NO_DATA" : getCondition(totalViolations),
   };
 }

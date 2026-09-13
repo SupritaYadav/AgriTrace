@@ -263,32 +263,80 @@ function ShipmentDetails() {
 
       {actionError && <ErrorState message="Action failed" retry={() => setActionError(null)} />}
 
-      {/* Sensors */}
-      <section className="sensor-grid">
-        <span className="sensor-card">
-          <FaTemperatureHalf />
-          <div className="sensor-card-title">Temperature</div>
-          <div className="sensor-card-value">{shipment.thresholds?.temperature?.max != null ? `${shipment.thresholds.temperature.max}°C` : "Unknown"}</div>
-          <div className="sensor-card-sub">Safe max threshold</div>
-        </span>
-        <span className="sensor-card">
-          <FaDroplet />
-          <div className="sensor-card-title">Humidity</div>
-          <div className="sensor-card-value">{shipment.thresholds?.humidity?.max != null ? `${shipment.thresholds.humidity.max}%` : "Unknown"}</div>
-          <div className="sensor-card-sub">Safe max threshold</div>
-        </span>
-        <span className="sensor-card">
-          <FaLeaf />
-          <div className="sensor-card-title">Gas Threshold</div>
-          <div className="sensor-card-value">{shipment.thresholds?.gasLevel?.max != null ? `${shipment.thresholds.gasLevel.max}` : "Unknown"}</div>
-          <div className="sensor-card-sub">Max level</div>
-        </span>
-        <span className="sensor-card">
-          <FaBatteryThreeQuarters />
-          <div className="sensor-card-title">Device</div>
-          <div className="sensor-card-value">{sDevice}</div>
-          <div className="sensor-card-sub">Assigned device</div>
-        </span>
+      {/* Monitoring Thresholds */}
+      <section className="panel">
+        <div className="panel-header">
+          <h3>Monitoring Thresholds</h3>
+        </div>
+        <div className="sensor-grid">
+          <span className="sensor-card">
+            <FaTemperatureHalf />
+            <div className="sensor-card-title">Temperature Min</div>
+            <div className="sensor-card-value">{shipment.thresholds?.temperature?.min != null ? `${shipment.thresholds.temperature.min}°C` : "—"}</div>
+            <div className="sensor-card-sub">Minimum threshold</div>
+          </span>
+          <span className="sensor-card">
+            <FaTemperatureHalf />
+            <div className="sensor-card-title">Temperature Max</div>
+            <div className="sensor-card-value">{shipment.thresholds?.temperature?.max != null ? `${shipment.thresholds.temperature.max}°C` : "—"}</div>
+            <div className="sensor-card-sub">Maximum threshold</div>
+          </span>
+          <span className="sensor-card">
+            <FaDroplet />
+            <div className="sensor-card-title">Humidity Min</div>
+            <div className="sensor-card-value">{shipment.thresholds?.humidity?.min != null ? `${shipment.thresholds.humidity.min}%` : "—"}</div>
+            <div className="sensor-card-sub">Minimum threshold</div>
+          </span>
+          <span className="sensor-card">
+            <FaDroplet />
+            <div className="sensor-card-title">Humidity Max</div>
+            <div className="sensor-card-value">{shipment.thresholds?.humidity?.max != null ? `${shipment.thresholds.humidity.max}%` : "—"}</div>
+            <div className="sensor-card-sub">Maximum threshold</div>
+          </span>
+          <span className="sensor-card">
+            <FaLeaf />
+            <div className="sensor-card-title">Gas Max</div>
+            <div className="sensor-card-value">{shipment.thresholds?.gasLevel?.max != null ? `${shipment.thresholds.gasLevel.max}` : "—"}</div>
+            <div className="sensor-card-sub">Maximum threshold</div>
+          </span>
+        </div>
+      </section>
+
+      {/* Latest Environmental Reading */}
+      <section className="panel">
+        <div className="panel-header">
+          <h3>Latest Environmental Reading</h3>
+        </div>
+        {sDevice === "Not assigned" ? (
+          <div className="sensor-grid">
+            <span className="sensor-card">
+              <FaTemperatureHalf />
+              <div className="sensor-card-title">Temperature</div>
+              <div className="sensor-card-value">—</div>
+              <div className="sensor-card-sub">No monitoring device assigned</div>
+            </span>
+            <span className="sensor-card">
+              <FaDroplet />
+              <div className="sensor-card-title">Humidity</div>
+              <div className="sensor-card-value">—</div>
+              <div className="sensor-card-sub">No monitoring device assigned</div>
+            </span>
+            <span className="sensor-card">
+              <FaLeaf />
+              <div className="sensor-card-title">Gas Level</div>
+              <div className="sensor-card-value">—</div>
+              <div className="sensor-card-sub">No monitoring device assigned</div>
+            </span>
+            <span className="sensor-card">
+              <FaBatteryThreeQuarters />
+              <div className="sensor-card-title">Battery</div>
+              <div className="sensor-card-value">—</div>
+              <div className="sensor-card-sub">No monitoring device assigned</div>
+            </span>
+          </div>
+        ) : (
+          <p className="muted-text">Waiting for first telemetry reading...</p>
+        )}
       </section>
 
       {/* Timeline */}
