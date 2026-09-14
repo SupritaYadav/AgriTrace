@@ -1,67 +1,206 @@
 export function validateReading(data) {
   const errors = [];
 
-  if (!data || typeof data !== "object" || Array.isArray(data)) {
-    return ["telemetry payload must be an object"];
-  }
+  // ========================================================
+  // Identity
+  // ========================================================
 
-  const hasLatitude = data.latitude !== undefined;
-  const hasLongitude = data.longitude !== undefined;
-
-  if (typeof data.deviceId !== "string" || !data.deviceId.trim()) {
+  if (
+    typeof data.deviceId !== "string" ||
+    !data.deviceId.trim()
+  ) {
     errors.push("deviceId required");
   }
 
-  if (!Number.isFinite(data.temperature)) {
-    errors.push("temperature must be a finite number");
+  // ========================================================
+  // Sequence
+  // ========================================================
+
+  if (
+    !Number.isInteger(data.sequenceNumber) ||
+    data.sequenceNumber < 1
+  ) {
+    errors.push(
+      "sequenceNumber must be a positive integer"
+    );
   }
 
-  if (!Number.isFinite(data.humidity) || data.humidity < 0 || data.humidity > 100) {
-    errors.push("humidity must be between 0 and 100");
+  // ========================================================
+  // Temperature
+  // ========================================================
+
+  if (
+    typeof data.temperature !== "number" ||
+    !Number.isFinite(data.temperature)
+  ) {
+    errors.push(
+      "temperature must be a number"
+    );
   }
 
-  if (!Number.isFinite(data.battery) || data.battery < 0 || data.battery > 100) {
-    errors.push("battery must be between 0 and 100");
+  // ========================================================
+  // Humidity
+  // ========================================================
+
+  if (
+    typeof data.humidity !== "number" ||
+    !Number.isFinite(data.humidity) ||
+    data.humidity < 0 ||
+    data.humidity > 100
+  ) {
+    errors.push(
+      "humidity must be 0-100"
+    );
   }
+
+  // ========================================================
+  // Gas
+  // ========================================================
 
   if (
     data.gasLevel !== undefined &&
-    (!Number.isFinite(data.gasLevel) || data.gasLevel < 0)
+    (
+      typeof data.gasLevel !== "number" ||
+      !Number.isFinite(data.gasLevel) ||
+      data.gasLevel < 0
+    )
   ) {
-    errors.push("gasLevel must be a non-negative finite number");
+    errors.push(
+      "gasLevel must be a non-negative number"
+    );
   }
 
-  if (hasLatitude !== hasLongitude) {
-    errors.push("latitude and longitude must be provided together");
-  } else if (hasLatitude && (!Number.isFinite(data.latitude) || data.latitude < -90 || data.latitude > 90)) {
-    errors.push("latitude must be between -90 and 90");
+  // ========================================================
+  // Battery
+  // ========================================================
+
+  if (
+    typeof data.battery !== "number" ||
+    !Number.isFinite(data.battery) ||
+    data.battery < 0 ||
+    data.battery > 100
+  ) {
+    errors.push(
+      "battery must be 0-100"
+    );
   }
 
-  if (hasLongitude && (!Number.isFinite(data.longitude) || data.longitude < -180 || data.longitude > 180)) {
-    errors.push("longitude must be between -180 and 180");
+  // ========================================================
+  // GPS
+  // ========================================================
+
+  if (
+    data.latitude !== undefined &&
+    (
+      typeof data.latitude !== "number" ||
+      data.latitude < -90 ||
+      data.latitude > 90
+    )
+  ) {
+    errors.push(
+      "invalid latitude"
+    );
   }
 
-  if (data.shipmentId !== undefined &&
-      (typeof data.shipmentId !== "string" ||
-        !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(data.shipmentId.trim()))) {
-    errors.push("shipmentId must be a non-empty string when provided");
+  if (
+    data.longitude !== undefined &&
+    (
+      typeof data.longitude !== "number" ||
+      data.longitude < -180 ||
+      data.longitude > 180
+    )
+  ) {
+    errors.push(
+      "invalid longitude"
+    );
   }
 
-  if (typeof data.timestamp !== "string" || !data.timestamp.trim() || Number.isNaN(Date.parse(data.timestamp))) {
-    errors.push("timestamp must be a valid date");
+  if (
+    (
+      data.latitude !== undefined &&
+      data.longitude === undefined
+    ) ||
+    (
+      data.longitude !== undefined &&
+      data.latitude === undefined
+    )
+  ) {
+    errors.push(
+      "latitude and longitude must be provided together"
+    );
+  }
+
+  // ========================================================
+  // Timestamp
+  // ========================================================
+
+  if (
+    !data.timestamp ||
+    Number.isNaN(
+      Date.parse(data.timestamp)
+    )
+  ) {
+    errors.push(
+      "invalid timestamp"
+    );
+  }
+
+  // ========================================================
+  // Optional health structures
+  // ========================================================
+
+  if (
+    data.sensorHealth !== undefined &&
+    (
+      typeof data.sensorHealth !== "object" ||
+      Array.isArray(data.sensorHealth)
+    )
+  ) {
+    errors.push(
+      "sensorHealth must be an object"
+    );
+  }
+
+  if (
+    data.connectivity !== undefined &&
+    (
+      typeof data.connectivity !== "object" ||
+      Array.isArray(data.connectivity)
+    )
+  ) {
+    errors.push(
+      "connectivity must be an object"
+    );
   }
 
   return errors;
 }
 
-export function normalizeTelemetry(data, verifiedDeviceId, shipmentId) {
+export function normalizeTelemetry(data) {
   return {
-    ...data,
-    deviceId: verifiedDeviceId,
-    shipmentId: shipmentId || null,
-    dataHash: null,
-    checkpointId: null,
-    checkpointed: false,
-    timestamp: data.timestamp,
+    deviceId: data.deviceId,
+    shipmentId: data.shipmentId ?? null,
+
+    temperature:
+      data.temperature != null ? Number(data.temperature) : null,
+
+    humidity:
+      data.humidity != null ? Number(data.humidity) : null,
+
+    gasLevel:
+      data.gasLevel != null ? Number(data.gasLevel) : null,
+
+    battery:
+      data.battery != null ? Number(data.battery) : null,
+
+    latitude:
+      data.latitude != null ? Number(data.latitude) : null,
+
+    longitude:
+      data.longitude != null ? Number(data.longitude) : null,
+
+    timestamp: data.timestamp
+      ? new Date(data.timestamp)
+      : new Date(),
   };
 }

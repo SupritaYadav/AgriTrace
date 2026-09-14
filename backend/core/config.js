@@ -19,7 +19,7 @@ export const config = Object.freeze({
   port,
   mongoUri: requireEnv("MONGO_URI"),
   mongoDbName: requireEnv("MONGO_DB_NAME"),
-  mqttBrokerUrl: requireEnv("MQTT_BROKER_URL"),
+  mqttBrokerUrl: requireEnv("MQTT_BROKER_URL") || "mqtt://localhost:1883",
   mqttTopic: requireEnv("MQTT_TOPIC"),
   mqttUser: process.env.MQTT_USER?.trim() || "",
   mqttPassword: process.env.MQTT_PASSWORD || "",

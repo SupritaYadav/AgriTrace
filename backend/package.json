@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --test tests/",
     "test:watch": "node --test --watch tests/",
-    "test:coverage": "node --test --experimental-coverage tests/"
+    "test:coverage": "node --test --experimental-coverage tests/",
+    "start" : "node index.js"
   },
   "keywords": [],
   "author": "",

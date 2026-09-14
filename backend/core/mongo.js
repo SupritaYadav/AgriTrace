@@ -21,14 +21,45 @@ export async function connectMongo() {
   collections.listings = mongoDb.collection("listings");
   collections.routePlans = mongoDb.collection("routePlans");
 
-  // Telemetry indexes (preserved from original)
-  await collections.telemetry.createIndex({ deviceId: 1 });
-  await collections.telemetry.createIndex({ shipmentId: 1 });
-  await collections.telemetry.createIndex({ timestamp: 1 });
-  await collections.telemetry.createIndex({ shipmentId: 1, deviceId: 1, checkpointed: 1, timestamp: 1 });
-  await collections.telemetry.createIndex({ deviceId: 1, timestamp: -1 });
-  await collections.telemetry.createIndex({ shipmentId: 1, timestamp: -1 });
-  await collections.telemetry.createIndex({ shipmentId: 1, deviceId: 1, checkpointId: 1 });
+// Telemetry indexes
+
+await collections.telemetry.createIndex({ deviceId: 1 });
+
+await collections.telemetry.createIndex({ shipmentId: 1 });
+
+await collections.telemetry.createIndex({ timestamp: 1 });
+
+// IMPORTANT: prevents duplicate ESP32 telemetry
+await collections.telemetry.createIndex(
+  { deviceId: 1, sequenceNumber: 1 },
+  {
+    unique: true,
+    name: "unique_device_sequence",
+  }
+);
+
+await collections.telemetry.createIndex({
+  shipmentId: 1,
+  deviceId: 1,
+  checkpointed: 1,
+  timestamp: 1,
+});
+
+await collections.telemetry.createIndex({
+  deviceId: 1,
+  timestamp: -1,
+});
+
+await collections.telemetry.createIndex({
+  shipmentId: 1,
+  timestamp: -1,
+});
+
+await collections.telemetry.createIndex({
+  shipmentId: 1,
+  deviceId: 1,
+  checkpointId: 1,
+});
 
   // users indexes
   await collections.users.createIndex({ uid: 1 }, { unique: true });
