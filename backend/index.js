@@ -43,6 +43,17 @@ app.use("/api/v1/public", publicTraceRoutes);
 app.use("/api/v1/routes", routeRoutes);
 app.use("/api/v1/marketplace", marketplaceRoutes);
 
+app.get("/api/v1", (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      service: "AgriTrace API",
+      version: "v1",
+      status: "running",
+    },
+  });
+});
+
 app.get("/api/v1/health", async (req, res) => {
   try {
     res.json({
